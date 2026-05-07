@@ -1,0 +1,5 @@
+{
+  "bedroom_night": ["I can't sleep.", "I keep hearing something...", "Maybe some milk will help."],
+  "crowded_path_hover": ["That way has too many people.", "No... not that way.", "Please don't."],
+  "supermarket_stress": ["Too many voices.", "I can't tell which ones are real.", "Just get the groceries."]
+}

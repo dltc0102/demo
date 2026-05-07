@@ -1,0 +1,816 @@
+{
+  "tilesets": [
+    "env1.png",
+    "env2.png",
+    "env3.png",
+    "env4.png",
+    "env5.png",
+    "env6.png",
+    "false_tileset.png",
+    "normal_tileset.png",
+    "tileset_snowy.png"
+  ],
+  "tiles": [
+    {
+      "col": 7,
+      "row": 4,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 7,
+      "row": 5,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 7,
+      "row": 8,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 7,
+      "row": 9,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 7,
+      "row": 10,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 7,
+      "row": 11,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 7,
+      "row": 12,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 25,
+      "row": 4,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 24,
+      "row": 4,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 23,
+      "row": 4,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 22,
+      "row": 4,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 21,
+      "row": 4,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 20,
+      "row": 4,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 19,
+      "row": 4,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 18,
+      "row": 4,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 17,
+      "row": 4,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 16,
+      "row": 4,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 15,
+      "row": 4,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 14,
+      "row": 4,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 13,
+      "row": 4,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 12,
+      "row": 4,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 11,
+      "row": 4,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 9,
+      "row": 4,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 8,
+      "row": 4,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 10,
+      "row": 4,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 25,
+      "row": 18,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 17,
+      "row": 18,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 13,
+      "row": 18,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 30,
+      "row": 8,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 30,
+      "row": 9,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 30,
+      "row": 10,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 30,
+      "row": 11,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 30,
+      "row": 12,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 30,
+      "row": 13,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 30,
+      "row": 14,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 30,
+      "row": 15,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 30,
+      "row": 16,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 30,
+      "row": 17,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 27,
+      "row": 4,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 28,
+      "row": 4,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 29,
+      "row": 4,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 30,
+      "row": 4,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 30,
+      "row": 5,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 26,
+      "row": 4,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 30,
+      "row": 18,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 29,
+      "row": 18,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 24,
+      "row": 18,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 23,
+      "row": 18,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 22,
+      "row": 18,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 21,
+      "row": 18,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 20,
+      "row": 18,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 19,
+      "row": 18,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 18,
+      "row": 18,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 16,
+      "row": 18,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 15,
+      "row": 18,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 14,
+      "row": 18,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 12,
+      "row": 18,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 11,
+      "row": 18,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 10,
+      "row": 18,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 7,
+      "row": 18,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 8,
+      "row": 18,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 9,
+      "row": 18,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 7,
+      "row": 13,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 7,
+      "row": 14,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 7,
+      "row": 15,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 7,
+      "row": 16,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 7,
+      "row": 17,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 26,
+      "row": 18,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 30,
+      "row": 6,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 30,
+      "row": 7,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 19,
+      "row": 5,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 19,
+      "row": 6,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 19,
+      "row": 7,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 24,
+      "row": 11,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 25,
+      "row": 11,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 26,
+      "row": 11,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 26,
+      "row": 16,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 26,
+      "row": 17,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 26,
+      "row": 15,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 19,
+      "row": 8,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 20,
+      "row": 8,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 21,
+      "row": 8,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 22,
+      "row": 14,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 23,
+      "row": 14,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 26,
+      "row": 14,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 25,
+      "row": 7,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 26,
+      "row": 7,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 27,
+      "row": 7,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 10,
+      "row": 8,
+      "kind": "autotile",
+      "tileset": 7
+    },
+    {
+      "col": 9,
+      "row": 8,
+      "kind": "autotile",
+      "tileset": 7
+    },
+    {
+      "col": 12,
+      "row": 8,
+      "kind": "autotile",
+      "tileset": 7
+    },
+    {
+      "col": 13,
+      "row": 8,
+      "kind": "autotile",
+      "tileset": 7
+    },
+    {
+      "col": 15,
+      "row": 8,
+      "kind": "autotile",
+      "tileset": 7
+    },
+    {
+      "col": 16,
+      "row": 8,
+      "kind": "autotile",
+      "tileset": 7
+    },
+    {
+      "col": 11,
+      "row": 13,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 12,
+      "row": 13,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 13,
+      "row": 13,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 16,
+      "row": 13,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 17,
+      "row": 13,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 18,
+      "row": 13,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 11,
+      "row": 17,
+      "kind": "stamp",
+      "tileset": 2,
+      "tile": 0
+    },
+    {
+      "col": 8,
+      "row": 17,
+      "kind": "stamp",
+      "tileset": 6,
+      "tile": 0
+    },
+    {
+      "col": 9,
+      "row": 17,
+      "kind": "stamp",
+      "tileset": 6,
+      "tile": 0
+    },
+    {
+      "col": 10,
+      "row": 17,
+      "kind": "stamp",
+      "tileset": 6,
+      "tile": 0
+    },
+    {
+      "col": 19,
+      "row": 17,
+      "kind": "stamp",
+      "tileset": 6,
+      "tile": 0
+    },
+    {
+      "col": 20,
+      "row": 17,
+      "kind": "stamp",
+      "tileset": 6,
+      "tile": 0
+    },
+    {
+      "col": 21,
+      "row": 17,
+      "kind": "stamp",
+      "tileset": 6,
+      "tile": 0
+    },
+    {
+      "col": 12,
+      "row": 17,
+      "kind": "stamp",
+      "tileset": 2,
+      "tile": 0
+    },
+    {
+      "col": 13,
+      "row": 17,
+      "kind": "stamp",
+      "tileset": 2,
+      "tile": 0
+    },
+    {
+      "col": 14,
+      "row": 17,
+      "kind": "stamp",
+      "tileset": 2,
+      "tile": 0
+    },
+    {
+      "col": 14,
+      "row": 16,
+      "kind": "stamp",
+      "tileset": 2,
+      "tile": 0
+    },
+    {
+      "col": 15,
+      "row": 16,
+      "kind": "stamp",
+      "tileset": 2,
+      "tile": 0
+    },
+    {
+      "col": 16,
+      "row": 16,
+      "kind": "stamp",
+      "tileset": 2,
+      "tile": 0
+    },
+    {
+      "col": 16,
+      "row": 17,
+      "kind": "stamp",
+      "tileset": 2,
+      "tile": 0
+    },
+    {
+      "col": 17,
+      "row": 17,
+      "kind": "stamp",
+      "tileset": 2,
+      "tile": 0
+    },
+    {
+      "col": 15,
+      "row": 17,
+      "kind": "stamp",
+      "tileset": 2,
+      "tile": 0
+    },
+    {
+      "col": 18,
+      "row": 17,
+      "kind": "stamp",
+      "tileset": 2,
+      "tile": 0
+    },
+    {
+      "col": 13,
+      "row": 16,
+      "kind": "stamp",
+      "tileset": 2,
+      "tile": 0
+    },
+    {
+      "col": 29,
+      "row": 17,
+      "kind": "stamp",
+      "tileset": 6,
+      "tile": 0
+    },
+    {
+      "col": 29,
+      "row": 5,
+      "kind": "stamp",
+      "tileset": 6,
+      "tile": 24
+    },
+    {
+      "col": 28,
+      "row": 5,
+      "kind": "stamp",
+      "tileset": 6,
+      "tile": 24
+    },
+    {
+      "col": 25,
+      "row": 17,
+      "kind": "stamp",
+      "tileset": 6,
+      "tile": 36
+    },
+    {
+      "col": 25,
+      "row": 16,
+      "kind": "stamp",
+      "tileset": 6,
+      "tile": 36
+    },
+    {
+      "col": 25,
+      "row": 15,
+      "kind": "stamp",
+      "tileset": 6,
+      "tile": 36
+    },
+    {
+      "col": 25,
+      "row": 14,
+      "kind": "stamp",
+      "tileset": 6,
+      "tile": 36
+    },
+    {
+      "col": 25,
+      "row": 13,
+      "kind": "stamp",
+      "tileset": 6,
+      "tile": 36
+    },
+    {
+      "col": 25,
+      "row": 12,
+      "kind": "stamp",
+      "tileset": 6,
+      "tile": 36
+    },
+    {
+      "col": 26,
+      "row": 12,
+      "kind": "autotile",
+      "tileset": 0
+    },
+    {
+      "col": 26,
+      "row": 13,
+      "kind": "autotile",
+      "tileset": 0
+    }
+  ]
+}
