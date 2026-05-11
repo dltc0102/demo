@@ -1,0 +1,42 @@
+{
+    "sfx": {
+        "heartbeat": 1.0,
+        "pouring_milk": 0.515625,
+        "fridge_door_open": 1.0,
+        "fridge_door_close": 1.0,
+        "page_flip": 0.6171875,
+        "paper_crunch": 0.390625,
+        "wood_left1": 1.0,
+        "wood_left2": 0.1953125,
+        "wood_right1": 1.0,
+        "wood_right2": 0.1953125,
+        "tiles_left1": 1.0,
+        "tiles_left2": 1.0,
+        "tiles_right1": 1.0,
+        "tiles_right2": 1.0,
+        "drinking1": 1.0,
+        "drinking2": 1.0,
+        "drinking3": 1.0,
+        "glass_on_counter": 0.6953125,
+        "glass_on_table": 1.0,
+        "unscrew1": 1.0,
+        "unscrew2": 1.0,
+        "unscrew3": 1.0,
+        "unscrew4": 1.0,
+        "screwon1": 1.0,
+        "screwon2": 1.0,
+        "screwon3": 1.0,
+        "screwon4": 1.0,
+        "speech_sfx": 0.6796875
+    },
+    "voices": {
+        "dont_touch_that": 0.484375,
+        "glass_of_milk": 0.1640625,
+        "look_behind_you": 0.5703125,
+        "someones_at_the_door": 0.125,
+        "looking_at_you": 0.5390625,
+        "breathing": 0.0546875,
+        "that_milks_expired": 0.09375,
+        "drink_it": 0.359375
+    }
+}

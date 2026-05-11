@@ -1,4 +1,5 @@
-import pygame, random, math
+import pygame, random, math, re
+from pathlib import Path
 from scripts.ui.font import Font
 
 class PhysicsEntity:
@@ -36,8 +37,95 @@ class Player(PhysicsEntity):
         self.jump_strength = 260
         self.gravity = 750
         self.max_fall_speed = 420
-
         self.grounded = False
+
+        # animation folders
+        self.idle_dir = Path("assets/entities/player/idle")
+        self.walk_dir = Path("assets/entities/player/walk")
+
+        self.idle_frames = self.load_frames(
+            self.idle_dir, "sloopy_idle*.png", "idle"
+        )
+        
+        if self.idle_frames:
+            idle_w, idle_h = self.idle_frames[0].get_size()
+            self.game.player_w = idle_w
+            self.game.player_h = idle_h
+            self.size = (idle_w, idle_h)
+
+        self.walk_frames = self.load_frames(
+            self.walk_dir, "*.png", "walk"
+        )
+
+        self.sprite_default_facing = "right"
+
+        self.animation_state = "idle"
+        self.frame_index = 0
+        self.animation_timer = 0
+
+        self.idle_frame_time = 0.18
+        self.walk_frame_time = 0.12
+
+        self.last_movement_x = 0
+
+        self.base_image = None
+        if self.idle_frames:
+            self.base_image = self.idle_frames[0]
+        elif self.walk_frames:
+            self.base_image = self.walk_frames[0]
+
+        if self.base_image:
+            old_bottom = self.pos[1] + self.size[1]
+            self.size = self.base_image.get_size()
+            self.pos[1] = old_bottom - self.size[1]
+
+            self.game.player_w = self.size[0]
+            self.game.player_h = self.size[1]
+
+    def fit_sprite_to_canvas(self, img, canvas_size):
+        canvas_w, canvas_h = canvas_size
+        visible_rect = img.get_bounding_rect()
+        if visible_rect.width == 0 or visible_rect.height == 0:
+            return pygame.Surface(canvas_size, pygame.SRCALPHA)
+        cropped = img.subsurface(visible_rect).copy()
+        scale = min(
+            canvas_w / cropped.get_width(),
+            canvas_h / cropped.get_height()
+        )
+        new_w = int(cropped.get_width() * scale)
+        new_h = int(cropped.get_height() * scale)
+        scaled = pygame.transform.scale(cropped, (new_w, new_h))
+        final_img = pygame.Surface(canvas_size, pygame.SRCALPHA)
+        x = (canvas_w - new_w) // 2
+        y = canvas_h - new_h
+        final_img.blit(scaled, (x, y))
+        return final_img
+
+    def load_frames(self, folder: Path, pattern: str, animation_name: str) -> list:
+        if not folder.exists():
+            print(f"[player] {animation_name} folder not found: {folder}")
+            return []
+
+        def frame_number(path: str) -> int:
+            match = re.search(r"(\d+)", path.stem)
+            return int(match.group(1)) if match else 0
+
+        frame_paths = sorted(folder.glob(pattern), key=frame_number)
+        frames = []
+        for path in frame_paths:
+            try:
+                img = pygame.image.load(str(path)).convert_alpha()
+
+                if animation_name == "walk":
+                    img = self.fit_to_idle_visible_size(img)
+                frames.append(img)
+
+            except pygame.error as error:
+                print(f"[player] failed to load {path}: {error}")
+
+        if not frames:
+            print(f"[player] no {animation_name} frames found in {folder}")
+        return frames
 
     def jump(self):
         if self.grounded:
@@ -45,6 +133,8 @@ class Player(PhysicsEntity):
             self.grounded = False
 
     def update(self, movement=(0, 0), dt=1 / 60):
+        self.last_movement_x = movement[0]
+
         self.velocity[1] += self.gravity * dt
         self.velocity[1] = min(self.velocity[1], self.max_fall_speed)
 
@@ -59,6 +149,95 @@ class Player(PhysicsEntity):
             self.grounded = True
         else:
             self.grounded = False
+
+        self.update_animation(dt)
+
+    def update_animation(self, dt):
+        moving = abs(self.last_movement_x) > 0.01
+
+        if moving and self.walk_frames:
+            new_state = "walk"
+            frames = self.walk_frames
+            frame_time = self.walk_frame_time
+        else:
+            new_state = "idle"
+            frames = self.idle_frames
+            frame_time = self.idle_frame_time
+
+        if not frames: return
+        if new_state != self.animation_state:
+            self.animation_state = new_state
+            self.frame_index = 0
+            self.animation_timer = 0
+
+        self.animation_timer += dt
+        while self.animation_timer >= frame_time:
+            self.animation_timer -= frame_time
+            self.frame_index = (self.frame_index + 1) % len(frames)
+
+    def flip(self, image):
+        return pygame.transform.flip(image, True, False)
+    
+    def get_current_image(self):
+        if self.animation_state == "walk" and self.walk_frames:
+            frames = self.walk_frames
+        elif self.idle_frames:
+            frames = self.idle_frames
+        elif self.walk_frames:
+            frames = self.walk_frames
+        else:
+            return None
+
+        image = frames[self.frame_index % len(frames)]
+
+        if self.game.player_facing != self.sprite_default_facing:
+            image = self.flip(image)
+        return image
+
+    def render(self, surface, offset=(0, 0)):
+        image = self.get_current_image()
+        if image is None:
+            pygame.draw.rect(
+                surface,
+                (255, 255, 255),
+                pygame.Rect(
+                    self.pos[0] - offset[0],
+                    self.pos[1] - offset[1],
+                    self.size[0],
+                    self.size[1],
+                ),
+            )
+            return
+
+        x = int(self.pos[0] - offset[0])
+        y = int(self.pos[1] - offset[1])
+        surface.blit(image, (x, y))
+
+    def get_visible_rect(self, img):
+        rect = img.get_bounding_rect()
+        if rect.width <= 0 or rect.height <= 0:
+            return pygame.Rect(0, 0, img.get_width(), img.get_height())
+        return rect
+
+    def fit_to_idle_visible_size(self, img):
+        if not self.idle_frames:
+            return pygame.transform.scale(img, (self.game.player_w, self.game.player_h))
+        
+        idle_img = self.idle_frames[0]
+        idle_rect = self.get_visible_rect(idle_img)
+        walk_rect = self.get_visible_rect(img)
+        cropped_walk = img.subsurface(walk_rect).copy()
+        scale = idle_rect.height / cropped_walk.get_height()
+
+        new_w = max(1, int(cropped_walk.get_width() * scale))
+        new_h = max(1, int(cropped_walk.get_height() * scale))
+
+        scaled_walk = pygame.transform.scale(cropped_walk, (new_w, new_h))
+        final_img = pygame.Surface(idle_img.get_size(), pygame.SRCALPHA)
+        x = idle_rect.centerx - new_w // 2
+        y = idle_rect.bottom - new_h
+        final_img.blit(scaled_walk, (x, y))
+        return final_img
 
 class NPC(PhysicsEntity):
     def __init__(self, game, name, pos, size=(16, 32), dialogue=None):
