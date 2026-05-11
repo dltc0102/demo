@@ -65,21 +65,34 @@ class DialogueObject:
             "-": 320,
         }
         return delays[char] if char in delays.keys() else self.char_delay
+
+    def word_at_index(self, text: str, index: int) -> str:
+        start = index
+        end = index
+        while start > 0 and not text[start - 1].isspace(): start -= 1
+        while end < len(text) and not text[end].isspace(): end += 1
+        return text[start:end]
+
+    def pitch_for_char(self, text: str, index: int) -> float:
+        word = self.word_at_index(text, index).strip()
+        if word.endswith("?!") or word.endswith("!?"):
+            return random.uniform(1.35, 1.55)
+
+        if word.endswith("?"):
+            return random.uniform(1.25, 1.45)
+
+        if word.endswith("!"):
+            return random.uniform(1.2, 1.4)
+
+        if word.endswith("..."):
+            return random.uniform(1.18, 1.35)
+
+        return random.uniform(0.9, 1.15)
     
-    def update_speech_blips(self, is_typing: bool, speech_blip_interval: float | None = None) -> None:
-        if not is_typing: return
-        interval = self.speech_blip_interval if speech_blip_interval is None else speech_blip_interval
-        now = pygame.time.get_ticks()
-        if now - self.last_speech_blip_time < interval: return
-        self.last_speech_blip_time = now
-        self.game.sfx.play_speech_blip()
-        
     def update_typing(self):
         now = pygame.time.get_ticks()
         if now < self.pause_until: return
         text = self.current_text()
-        is_typing = self.visible_chars < len(text)
-        self.update_speech_blips(is_typing)
         if self.visible_chars >= len(text):
             if self.line_finished_time is None:
                 self.line_finished_time = now
@@ -87,9 +100,13 @@ class DialogueObject:
 
         self.char_timer += max(16, self.game.clock.get_time())
         while self.visible_chars < len(text) and self.char_timer >= self.char_delay:
-            char = text[self.visible_chars]
+            char_index = self.visible_chars
+            char = text[char_index]
             self.visible_chars += 1
             self.char_timer -= self.char_delay
+            if not char.isspace():
+                self.game.sfx.play_speech_blip()
+
             if char in (".", ",", "?", "!", "-"):
                 self.pause_until = now + self.next_char_delay(char)
                 break

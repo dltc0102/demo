@@ -31,6 +31,22 @@ class HeartRateSystem:
         self.stress_units += amount
         self.stress_units = min(self.stress_units, self.max_stress_units)
 
+    def force_bpm(self, bpm, sync_stress=True):
+        self.bpm = max(self.resting_bpm, min(float(bpm), self.max_bpm))
+
+        if sync_stress:
+            stress_ratio = self.stress_amount()
+            self.stress_units = max(0, min(self.max_stress_units, stress_ratio * self.max_stress_units))
+
+    def coping_state_text(self):
+        if self.is_grounding and self.panic_active and not self.coping_worked:
+            return "it is not working... keep trying"
+        if self.is_grounding:
+            return "keep breathing..."
+        if self.get_state() in ("panic attack", "psychosis"):
+            return "hold B to breathe"
+        return ""
+
     def start_panic_attack(self, coping_worked=True):
         if self.panic_active:
             return

@@ -5,13 +5,16 @@ from pathlib import Path
 class SoundEffects:
     def __init__(self):
         pygame.mixer.init()
+        pygame.mixer.set_num_channels(10)
 
         self.sounds = self.load_mp3_folder("assets/sounds")
         self.voices = self.load_mp3_folder("assets/voices")
 
+        self.whisper_sound = self._load_wav("assets/voices/schizophrenia_voices.wav")
+        self.static_sound = self._load_wav("assets/sounds/static_noise_bg.wav")
+
         self.sound_aliases = {
             "heartbeat": "heartbeat_single",
-            "speech_sfx": "blip",
             "wood_left1": "walking_on_wood_left1",
             "wood_left2": "walking_on_wood_left2",
             "wood_right1": "walking_on_wood_right1",
@@ -60,7 +63,13 @@ class SoundEffects:
             pygame.mixer.Channel(4),
             pygame.mixer.Channel(5),
         ]
-        self.speech_channel = pygame.mixer.Channel(6)
+        self.speech_channel     = pygame.mixer.Channel(6)
+        self.static_channel     = pygame.mixer.Channel(7)
+        self.whisper_channel    = pygame.mixer.Channel(8)
+
+        # reserve these so pygame never reassigns them to other sounds
+        self.static_channel.set_reserved(True) if hasattr(pygame.mixer.Channel, 'set_reserved') else None
+        pygame.mixer.set_reserved(9)  # reserve channels 0-8 from auto-assignment
 
         self.last_heartbeat: int        = 0
         self.next_foot: str             = "left"
@@ -68,7 +77,16 @@ class SoundEffects:
         self.heartbeat_active = False
         self.heartbeat_bpm = 70
         self.last_speech_blip_time = 0
+
+        self.speech_blip = self.make_blip_sound()
     
+    def _load_wav(self, path: str) -> pygame.mixer.Sound | None:
+        try:
+            return pygame.mixer.Sound(path)
+        except Exception as e:
+            print(f"[SOUND LOAD ERROR] {path}: {e}")
+            return None
+        
     def load_mp3_folder(self, folder):
         folder = Path(folder)
         loaded = {}
@@ -100,8 +118,7 @@ class SoundEffects:
     def start_heartbeat(self, bpm=70, volume=0.35):
         self.heartbeat_active = True
         self.heartbeat_bpm = bpm
-        self.heartbeat_sound.set_volume(volume)
-        yield
+        if self.heartbeat_sound: self.heartbeat_sound.set_volume(volume)
 
     def stop_heartbeat(self):
         self.heartbeat_active = False
@@ -109,8 +126,7 @@ class SoundEffects:
 
     def set_heartbeat_bpm(self, bpm, volume=None):
         self.heartbeat_bpm = bpm
-        if volume is not None:
-            self.heartbeat_sound.set_volume(volume)
+        if volume is not None and self.heartbeat_sound: self.heartbeat_sound.set_volume(volume)
 
     def update(self):
         if getattr(self, "heartbeat_active", False):
@@ -148,9 +164,13 @@ class SoundEffects:
         if not sound: return
         sound.play()
 
-    def play_key(self, key: str):
+    def play_key(self, key: str, volume: float | None = None) -> pygame.mixer.Channel | None:
         sound = self.load_sound(key)
-        self.play(sound)
+        if not sound: return None
+        channel = sound.play()
+        if channel and volume is not None:
+            channel.set_volume(volume)
+        return channel
 
     def play_voice(self, sound_key: str, volume: float | None = None) -> pygame.mixer.Channel | None:
         voice: pygame.mixer.Sound | None = self.load_voice(sound_key)
@@ -199,25 +219,52 @@ class SoundEffects:
         shifted = shifted.astype(arr.dtype)
         return pygame.sndarray.make_sound(shifted)
 
-    def play_speech_blip(self, volume: float = 0.16, maxtime: int = 45) -> None:
-        sound = self.load_sound("speech_sfx")
-        if not sound: sound = self.load_sound("blip")
-        if not sound: return
-        pitch = random.uniform(0.9, 1.15)
-        shifted = self.pitch_shift_sound(sound, pitch)
-        if not shifted: return
-        shifted.set_volume(volume)
-        if hasattr(self, "speech_channel"):
-            self.speech_channel.play(shifted, maxtime=maxtime)
-        else:
-            shifted.play(maxtime=maxtime)
+    def make_blip_sound(self, frequency: int = 220, duration_ms: int = 80, volume: float = 0.4) -> pygame.mixer.Sound:
+        sample_rate = 44100
+        num_samples = int(sample_rate * duration_ms / 1000)
+        t = np.linspace(0, duration_ms / 1000, num_samples, endpoint=False)
+        wave = np.sin(2 * np.pi * frequency * t)
+        fade_samples = int(num_samples * 0.3)
+        envelope = np.ones(num_samples)
+        envelope[-fade_samples:] = np.linspace(1, 0, fade_samples)
+        wave = (wave * envelope * 32767 * volume).astype(np.int16)
+        stereo = np.stack([wave, wave], axis=1)
+        return pygame.sndarray.make_sound(stereo)
 
-    def update_speech_blips(self, is_typing: bool, speech_blip_interval: float=28) -> None:
-        if not is_typing: return
-        now = pygame.time.get_ticks()
-        if now - self.last_speech_blip_time < self.speech_blip_interval: return
-        self.last_speech_blip_time = now
-        self.game.sfx.play_speech_blip()
+    def play_speech_blip(self, volume: float = 0.45) -> None:
+        if self.speech_channel.get_busy():
+            return
+        self.speech_blip.set_volume(volume)
+        self.speech_channel.play(self.speech_blip)
         
     def is_voice_playing(self) -> bool:
         return any(channel.get_busy() for channel in self.voice_channels)
+
+    def stop_static(self) -> None:
+        self.static_channel.stop()
+
+    def set_static_volume(self, volume: float) -> None:
+        sound = self.sounds.get("static_noise_bg")
+        if sound: sound.set_volume(volume)
+
+    def start_whispers(self, volume: float = 0.3) -> None:
+        if not self.whisper_sound:
+            print("[MISSING SOUND] whispers.wav / schizophrenia_voices.wav")
+            return
+        self.whisper_sound.set_volume(volume)
+        self.whisper_channel.stop()
+        self.whisper_channel.play(self.whisper_sound, loops=-1)
+
+    def start_static(self, volume: float = 0.15) -> None:
+        if not self.static_sound:
+            print("[MISSING SOUND] static_noise_bg.wav")
+            return
+        self.static_sound.set_volume(volume)
+        self.static_channel.play(self.static_sound, loops=-1)
+
+    def stop_whispers(self) -> None:
+        self.whisper_channel.stop()
+
+    def set_whisper_volume(self, volume: float) -> None:
+        sound = self.sounds.get("whispers") or self.voices.get("schizophrenia_voices")
+        if sound: sound.set_volume(volume)

@@ -1,5 +1,4 @@
 
-
 class _CutsceneHandle:
     def __init__(self, cutscene, runner):
         self.cutscene = cutscene
@@ -7,7 +6,7 @@ class _CutsceneHandle:
 
     def overlap_with(self, *sound_keys: str, volume: float | None = None):
         for key in sound_keys:
-            self.cutscene.game.sfx.play_voice(key, volume)
+            self.cutscene.play_overlap_audio(key, volume)
         return self
 
     def __iter__(self):
@@ -21,7 +20,7 @@ class _VoiceHandle:
 
     def overlap_with(self, *sound_keys: str, volume: float | None = None):
         for key in sound_keys:
-            self.cutscene.game.sfx.play_voice(key, volume)
+            self.cutscene.play_overlap_audio(key, volume)
         return self
 
     def __iter__(self):
@@ -37,6 +36,17 @@ class CutsceneEngine:
         self.game.sfx.play_voice(sound_key, volume)
         return _VoiceHandle(self, sound_key)
 
+    def play_overlap_audio(self, sound_key: str, volume: float | None = None):
+        if sound_key in self.game.sfx.voices:
+            self.game.sfx.play_voice(sound_key, volume)
+            return
+
+        if sound_key in self.game.sfx.sounds:
+            self.game.sfx.play_key(sound_key, volume)
+            return
+
+        raise ValueError(f"[MISSING OVERLAP AUDIO] {sound_key}")
+        
     def clear(self):
         self.stop()
         self.game.thought_manager.clear()
@@ -83,11 +93,17 @@ class CutsceneEngine:
         yield from self.wait_until_voice_finished()
     
     def shakethink(self, text, target, stall: int = 2200, gap: int = 250):
-        lines = text if isinstance(text, list) else [text]
-        for line in lines:
-            thought = self.game.thought_manager.shakethink(str(line), target, stall=stall)
-            while not thought.finished: yield
-            yield from self.wait(gap)
+        def runner():
+            lines = text if isinstance(text, list) else [text]
+
+            for line in lines:
+                thought = self.game.thought_manager.shakethink(str(line), target, stall=stall)
+
+                while not thought.finished:
+                    yield
+
+                yield from self.wait(gap)
+        return _CutsceneHandle(self, runner)
         
     def cloudthink(self, lines, target, stall: int = 1800, gap: int = 180):
         def runner():

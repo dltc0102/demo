@@ -1,0 +1,44 @@
+{
+  "special_thanks": [
+    {
+      "name": "People who have requested anonymity",
+      "note": "Thank you for sharing your experiences and helping shape the representation."
+    }
+  ],
+  "sounds": [
+    {
+      "name": "Sound effects",
+      "source": "Pixabay"
+    }
+  ],
+  "voices": [
+    {
+      "name": "Voice lines",
+      "source": "ElevenLabs",
+      "credit": "Voices by ElevenLabs"
+    }
+  ],
+  "fonts": [
+    {
+      "name": "Pixel fonts",
+      "credit": "DaFluffyPotato",
+      "font_type": "bitmap",
+      "path": "assets/fonts/large_font_white.png",
+      "sample": "SAMPLE"
+    },
+    {
+      "name": "Retrogression Regular",
+      "credit": "slnc. on Behance",
+      "font_type": "ttf",
+      "path": "assets/fonts/Retrogression-Regular.ttf",
+      "sample": "SAMPLE"
+    },
+    {
+      "name": "Minecraftia Regular",
+      "credit": "Andrew Tyler on dafont.com",
+      "font_type": "ttf",
+      "path": "assets/fonts/Minecraftia-Regular.ttf",
+      "sample": "SAMPLE"
+    }
+  ]
+}

@@ -33,7 +33,9 @@ class FirstScene:
         self.fridge_open_img, *_    = load_image(self.asset_paths['fridge_open'])
         self.milk_img, *_           = load_image(self.asset_paths['milk_img'])
         self.sticky_note_img, *_    = load_image(self.asset_paths['sticky_note_img'])
-        self.outside_home_img, *_ = load_image(self.asset_paths['outside_home'])
+        self.bedroom_day_img, *_    = load_image(self.asset_paths['bedroom_day'])
+        self.kitchen_day_img, *_    = load_image(self.asset_paths['kitchen_day'])
+        self.outside_home_img, *_   = load_image(self.asset_paths['outside_home'])
         self.exit_house_trigger = pygame.Rect(self.game.internal_w * 2 - 8, 300, 8, 128)
 
         """ flags """
@@ -61,6 +63,8 @@ class FirstScene:
             "show_exit_pulse"       : False,
             "sticky_note_open_count": 0,
             "shake_prompt_shown"    : False,
+            "shake_note_prompt_shown": False,
+            "bed_sleep_done"        : False,
         }
 
         """ doors & collision areas """
@@ -110,6 +114,9 @@ class FirstScene:
         self.start_time: int = 0
         self.fade_alpha: int = 255
         self.fade_speed: int = 180
+        self.end_fade_alpha: float = 0
+        self.end_fade_speed: int = 180
+        self.wake_up_started: bool = False
 
 
         """ sticky note """
@@ -122,6 +129,7 @@ class FirstScene:
         self.note_close_rect: pygame.Rect | None = None
 
         """ closet """
+        self.closet_rect = pygame.Rect(557, 294, 147, 122)
         self.closet_zone = InteractZone(
             points=[(557, 294), (704, 294), (704, 416), (557, 416)],
             prompt="Press [E] to change",
@@ -149,6 +157,9 @@ class FirstScene:
         self.fridge_open_img, *_ = load_image(self.asset_paths["fridge_open"])
         self.milk_img, *_ = load_image(self.asset_paths["milk_img"])
         self.sticky_note_img, *_ = load_image(self.asset_paths["sticky_note_img"])
+        self.bedroom_day_img, *_ = load_image(self.asset_paths["bedroom_day"])
+        self.kitchen_day_img, *_ = load_image(self.asset_paths["kitchen_day"])
+        self.outside_home_img, *_ = load_image(self.asset_paths["outside_home"])
         self.milk_in_hand_img = pygame.transform.scale(self.milk_img, (18, 22))
     
     def world_points(self, points, world_x=0) -> list[tuple[int, int]]:
@@ -171,6 +182,8 @@ class FirstScene:
         self.started = False
         self.start_time = pygame.time.get_ticks()
         self.fade_alpha = 255
+        self.end_fade_alpha = 0
+        self.wake_up_started = False
         self.game.player.pos = [ 
             110,
             self.game.screen_h - self.game.ground_h - self.game.player_h - 30
@@ -202,8 +215,7 @@ class FirstScene:
                 self.closet_zone.update(dt, self.game.player.rect(), self.scroll_x)
                 self.closet_zone.render(self.game.display, self.scroll_x)
             self.render_note_interaction()
-            self.render_exit_pulse()
-            self.render_bedroom_pulse()
+            self.render_glow_prompt()
             self.render_sticky_note_icon()
             mx, my = self.mouse_helper()
             # pygame.draw.rect(self.game.display, (255, 255, 255, 100), (64, 128, 64, 128))
@@ -225,6 +237,7 @@ class FirstScene:
             self.game.dialogue_manager.update()
             self.game.thought_manager.update(dt)
             self.game.sfx.update()
+            self.game.render_sfx_heartbeat_ui()
 
             self.game.thought_manager.render(self.game.display, offset=(self.scroll_x, 0))
             self.game.dialogue_manager.render(self.game.display, offset=(self.scroll_x, 0))
@@ -238,26 +251,32 @@ class FirstScene:
             if self.scene_ended:
                 return "route_choice"
 
-            self.game.scale_display_to_screen()
-            pygame.display.update()
-            self.game.clock.tick(self.game.fps)
-
             if self.fade_alpha > 0:
                 self.fade_alpha = max(0, self.fade_alpha - self.fade_speed * dt)
                 self.render_fade(self.fade_alpha)
 
-            if self.flags['sleeping']:
+            if self.flags["sleeping"]:
                 self.end_fade_alpha = min(255, self.end_fade_alpha + self.end_fade_speed * dt)
                 self.render_fade(self.end_fade_alpha)
 
-                if self.end_fade_alpha >= 255:
+                if self.end_fade_alpha >= 255 and not self.wake_up_started:
+                    self.wake_up_started = True
+                    self.flags["sleeping"] = False
+                    self.end_fade_alpha = 0
+                    self.fade_alpha = 255
                     self.game.cutscene.start(self.wake_up())
+
+            self.game.scale_display_to_screen()
+            pygame.display.update()
+            self.game.clock.tick(self.game.fps)
 
 
     """ story scripts """
     def sequence(self):
+        self.game.sfx.start_static()
+        self.game.sfx.start_whispers()
         yield from self.script.wait(1000)
-        self.game.sfx.start_heartbeat(bpm=70, volume=0.25)
+        self.game.start_heartbeat(bpm=70, volume=1)
         yield from self.script.say(["ugh... I can't sleep", "again"], self.game.player)
         yield from self.script.say("I just want one quiet night.", self.game.player, interval=20)
         yield from self.script.racethink(
@@ -270,14 +289,13 @@ class FirstScene:
             self.game.player
         )
         yield from self.script.wait(500)
-        self.game.sfx.set_heartbeat_bpm(80)
+        self.game.set_heartbeat_bpm(80)
         yield from self.script.shakethink("why me?!", self.game.player)
         yield from self.script.say(
             ["who- what?", "who's laughing?", "i don't know why...", "but they keep me up at night", "why me"],
             self.game.player
         )
-        self.game.sfx.set_heartbeat_bpm(70)
-        # yield from self.script.play_voice("you_look_like_a_confused_potato")
+        self.game.set_heartbeat_bpm(70)
         yield from self.script.cloudthink(
             ["...a bit thirsty...", "what to drink?", "maybe milk?", "or ice cold water?", "can of coke?", "no, sleep first"], 
             self.game.player, stall=2000
@@ -285,13 +303,13 @@ class FirstScene:
         yield from self.script.wait(500)
         yield from self.script.play_voice("glass_of_milk")
         yield from self.script.wait(1500)
-        self.game.sfx.set_heartbeat_bpm(80)
+        self.game.set_heartbeat_bpm(80)
         yield from self.script.say(
             ["who- who's there?", "how can you hear what i'm thinking???"], 
             self.game.player
         )
         yield from self.script.racethink("what's going on", self.game.player)
-        self.game.sfx.set_heartbeat_bpm(90, volume=0.35)
+        self.game.set_heartbeat_bpm(90, volume=0.35)
         yield from self.script.say(
             ["huh? I'm-", "im not", "i can't help it", "they stress me out"], 
             self.game.player
@@ -301,32 +319,37 @@ class FirstScene:
             ["hello-?", "they don't respond to what I say", "they just talk whenever they want to", "i cant- control them"], 
             self.game.player
         )
-        self.game.sfx.set_heartbeat_bpm(70, volume=0.2)
+        self.game.set_heartbeat_bpm(70, volume=0.2)
         self.flags["door_unlocked"] = True
 
     def get_milk(self):
         if not self.in_kitchen and not self.flags['fridge_opened']: return
         yield from self.script.wait(1000)
-        self.game.sfx.set_heartbeat_bpm(70)
+        self.game.set_heartbeat_bpm(70)
         yield from self.script.play_voice("dont_touch_that")
         yield from self.script.play_voice("do_it_again")
         yield from self.script.shakethink(["one thing at a time", "i can do this"], self.game.player)
-        yield from self.script.play_voice("do_it_again")
+        yield from self.script.play_voice("do_it_again_hale")
         yield from self.script.play_voice("theyre_all_looking_at_you")
+        yield from self.script.play_voice("do_it_again_janelle")
+        yield from self.script.shakethink(["you're the only one here", "just you"], self.game.player)
+        yield from self.panicked_breathing_ramp()
         yield from self.script.cloudthink(
             ["this is milk right?", "check the label", "why am I checking again?"],
             self.game.player
         ).overlap_with("check_again")
+        yield from self.script.play_voice("youre_like_a_turtle_with_instructions")
         yield from self.script.racethink(
             ["didn't I just drink some?", "no", "maybe", "what was I doing?"],
             self.game.player
-        ).overlap_with("you_already_did_this", "no_you_didnt")
+        ).overlap_with("you_already_did_this", "nah_you_didnt")
+        yield from self.script.play_voice("liar_liar")
         yield from self.script.cloudthink(
             ["something's wrong", "is this safe?", "it's just milk", "then why does it feel wrong?"],
             self.game.player
-        ).overlap_with("dont_trust_it")
+        ).overlap_with("just_trust_me")
         yield from self.script.play_voice("hes_opening_the_fridge_again")
-        self.game.sfx.set_heartbeat_bpm(100, volume=.3)
+        self.game.set_heartbeat_bpm(100, volume=.3)
         yield from self.script.shakethink(["breathe", "this feeling will pass"], self.game.player)
         yield from self.script.play_voice("dont_trust_him")
         yield from self.script.wait(500)
@@ -335,19 +358,23 @@ class FirstScene:
         yield from self.script.play_voice("dont_answer")
         yield from self.script.wait(1000)
         self.script.play_voice("schizophrenia_voices")
-        yield from self.script.say(["i can't tell what's real and what's not", "it's driving me nuts"], self.game.player)
+        yield from self.script.say(["i can't tell what's real and what's not", "it's driving me nuts", "i'd love to be able to silence them", "all of them", "it's not easy", "i can't just ignore them either"], self.game.player)
+        yield from self.script.shakethink("it's not easy at all", self.game.player)
+        yield from self.script.shakethink("it's not as simple as you think", self.game.player)
         yield from self.script.wait(1000)
-        self.game.sfx.set_heartbeat_bpm(120, volume=.4)
+        self.game.set_heartbeat_bpm(120, volume=.4)
         yield from self.script.play_voice("dont_touch_that").overlap_with("look_behind_you")
+        yield from self.script.shakethink("ahhh", self.game.player)
+        self.game.set_heartbeat_bpm(120, volume=.55)
         yield from self.script.play_voice("theyre_watching")
-        self.game.sfx.set_heartbeat_bpm(110, volume=.35)
         self.script.play_voice("what_are_you_doing")
-        yield from self.script.say(["i hope panadol helps", "i haven't had a good sleep since foreever", "i- i'm going back to sleep", "did I drink milk yet?", "did mom already buy the groceries?", "wait..."], self.game.player)
+        yield from self.script.say(["i haven't had a good sleep since foreever", "i- i'm going back to sleep", "did I drink milk yet?", "did mom already buy the groceries?", "wait..."], self.game.player)
+        yield from self.script.shakethink(["pills", "where are my pills?!"], self.game.player)
         self.game.sfx.play_key("pill_bottle")
         self.script.play_voice("why_are_you_so_slow")
         yield from self.script.cloudthink(["need sleep", "can't trust my memory", "why can't i do simple things?", "this doesn't feel real", "was that glass of milk always there?", "am i dreaming?", "normal people can do this"], self.game.player)
         yield from self.script.play_voice("nizenmehaimeishuine")
-        self.game.sfx.set_heartbeat_bpm(110, volume=.3)
+        self.game.set_heartbeat_bpm(110, volume=.3)
 
         if not self.flags["read_sticky_note"]:
             self.flags["force_note_glow"] = True
@@ -368,7 +395,7 @@ class FirstScene:
             self.game.sfx.play(sound)
             yield from self.script.wait(500)
 
-        self.game.sfx.set_heartbeat_bpm(90, volume=.25)
+        self.game.set_heartbeat_bpm(90, volume=.25)
         self.game.sfx.play_key("glass_on_table")
         yield from self.script.wait(450)
 
@@ -376,25 +403,27 @@ class FirstScene:
         yield from self.script.wait(320)
         self.game.sfx.play_footstep("wood")
         yield from self.script.wait(500)
-        self.game.sfx.set_heartbeat_bpm(80, volume=.15)
+        self.game.set_heartbeat_bpm(80, volume=.15)
         yield from self.script.say("finally...", self.game.player)
         self.script.play_voice("took_you_long_enough")
         yield from self.script.wait(800)
-        self.game.sfx.set_heartbeat_bpm(70, volume=.1)
+        self.game.set_heartbeat_bpm(70, volume=.1)
         self.flags["bed_sleep_done"] = True
         self.flags["going_to_bed"] = False
+        self.end_fade_alpha = 0
+        self.wake_up_started = False
         self.flags["sleeping"] = True
         self.flags["sticky_note_open_count"] = 0
 
     def wake_up(self):
         self.flags['is_next_day'] = True
-        self.game.sfx.start_heartbeat(bpm=70, volume=0.25)
+        self.game.start_heartbeat(bpm=70, volume=0.25)
         self.game.sfx.play_key("inf_laughter")
         self.game.sfx.play_key("xswl")
         yield from self.script.wait(1000)
         yield from self.script.say(["yaaaawwwwnnn", "what's all the fuzz in the morning?", "mom? are you here-?"], self.game.player)
         yield from self.script.play_voice("horse_in_the_backyard").overlap_with("groceries_groceries")
-        self.game.sfx.set_heartbeat_bpm(80)
+        self.game.set_heartbeat_bpm(80)
         yield from self.script.play_voice("whats_wrong_with_you")
         yield from self.script.play_voice("your_moms_not_here")
         yield from self.script.say(["oh- right, sticky note", "guh...", "groceries-", "people-", "stress-"], self.game.player)
@@ -427,7 +456,7 @@ class FirstScene:
         self.script.play_voice("dress")
         yield from self.script.wait(900)
         self.game.player.set_outfit("outdoors")
-        yield from self.scripts.play_voice("took_you_long_enough")
+        yield from self.script.play_voice("took_you_long_enough")
         yield from self.script.wait(400)
         yield from self.script.say("okay... jacket, cap, ready.", self.game.player)
         yield from self.script.wait(600)
@@ -435,7 +464,7 @@ class FirstScene:
         self.game.sfx.play_key("page_flip")
         yield from self.script.say(["i have enough", "i forgot what i need to buy", "what do i need to buy again?"], self.game.player)
         yield from self.script.shakethink("check the sticky note", self.game.player)
-        self.game.sfx.set_heartbeat_bpm(90)
+        self.game.set_heartbeat_bpm(90)
         yield from self.script.say(["did the note change?", "it changed", "got keys", "got my bag", "jacket", "cap"], self.game.player)
         yield from self.script.cloudthink(
             ["main street is faster", "too many people", "quiet route is longer", "what if I get lost?", "just choose"],
@@ -631,38 +660,49 @@ class FirstScene:
         self.game.display.blit(coord_text, (50, 10))
         return mx, my         
     
-    def render_bedroom_pulse(self):
-        if not self.flags.get("show_bedroom_pulse"): return
-        if self.in_kitchen: return
-        pulse = (math.sin(pygame.time.get_ticks() * 0.004) + 1) / 2
-        alpha = int(30 + pulse * 60)
-        arrow_x = self.bedroom_to_kitchen_trigger.x - 40
-        arrow_y = self.bedroom_to_kitchen_trigger.centery
-        label = "← Bedroom"
-        surf = self.game.heart_ui_font.render(label, True, (255, 245, 180))
-        surf.set_alpha(alpha)
-        self.game.display.blit(surf, (arrow_x - surf.get_width(), arrow_y))
-    
-    def render_exit_pulse(self):
-        if not self.flags["show_exit_pulse"]: return
-        pulse = (math.sin(pygame.time.get_ticks() * 0.004) + 1) / 2
-        alpha = int(40 + pulse * 80)
+    def render_glow_prompt(self) -> None:
+        if self.transitioning: return
 
-        if not self.in_kitchen:
-            label = "Kitchen →"
-            surf = self.game.heart_ui_font.render(label, True, (255, 245, 180))
-            surf.set_alpha(alpha)
-            x = self.bedroom_to_kitchen_trigger.x - surf.get_width() - 8
-            y = self.bedroom_to_kitchen_trigger.centery - surf.get_height() // 2
-            self.game.display.blit(surf, (x - self.scroll_x, y))
+        if self.flags.get("show_exit_pulse") and self.in_kitchen:
+            self.render_glowing_text("Exit house ->", (self.game.internal_w - 170, self.exit_house_trigger.centery), color=(180, 255, 190))
+            return
 
         if self.in_kitchen:
-            label = "Exit house →"
-            surf = self.game.heart_ui_font.render(label, True, (180, 235, 180))
-            surf.set_alpha(alpha)
-            x = self.game.internal_w - surf.get_width() - 20
-            y = self.exit_house_trigger.centery - surf.get_height() // 2
-            self.game.display.blit(surf, (x, y))
+            self.render_glowing_text("Bedroom <-", (40, self.kitchen_to_bedroom_trigger.centery), color=(255, 245, 180))
+            return
+
+        if self.flags.get("door_unlocked") or self.flags.get("show_exit_pulse") or self.flags.get("show_bedroom_pulse"):
+            self.render_glowing_text("Kitchen ->", (self.game.internal_w - 170, self.bedroom_to_kitchen_trigger.centery), color=(255, 245, 180))
+
+    def render_glowing_text(self, text: str, pos: tuple[int, int], color=(255, 245, 180)) -> None:
+        pulse = (math.sin(pygame.time.get_ticks() * 0.004) + 1) / 2
+        alpha = int(90 + pulse * 120)
+
+        x, y = pos
+        font = self.game.heart_ui_font
+        text_surf = font.render(text, True, color)
+        text_surf.set_alpha(alpha)
+
+        glow_surf = font.render(text, True, color)
+        glow_surf.set_alpha(int(alpha * 0.35))
+
+        for ox, oy in [(-2, 0), (2, 0), (0, -2), (0, 2), (-1, -1), (1, -1), (-1, 1), (1, 1)]:
+            self.game.display.blit(glow_surf, (x + ox, y + oy))
+
+        self.game.display.blit(text_surf, (x, y))
+        
+    def render_sfx_heartbeat_ui(self) -> None:
+        if not getattr(self.sfx, "heartbeat_active", False): return
+        bpm = int(self.sfx.heartbeat_bpm)
+        pulse = (math.sin(pygame.time.get_ticks() * 0.012) + 1) / 2
+        icon_size = int(16 * (1 + pulse * 0.18))
+        icon = pygame.transform.scale(self.heart_icon, (icon_size, icon_size))
+        text_surf = self.heart_ui_font.render(str(bpm), True, (255, 255, 255))
+        total_width = icon.get_width() + 6 + text_surf.get_width()
+        x = self.internal_w // 2 - total_width // 2
+        y = 14
+        self.display.blit(icon, (x, y))
+        self.display.blit(text_surf, (x + icon.get_width() + 6, y - 1))
             
 
     """ room transition """
@@ -1024,3 +1064,16 @@ class FirstScene:
 
         text_surf = clock_font.render(clock_text, True, clock_color)
         self.game.display.blit(text_surf, (21, 335))
+
+    """ audio helpers """
+    def panicked_breathing_ramp(self):
+        self.game.sfx.play_key("male_panicked_breathing", volume=0.65)
+        self.game.set_heartbeat_bpm(90, volume=.3)
+        yield from self.script.wait(700)
+        self.game.set_heartbeat_bpm(100, volume=.35)
+        yield from self.script.wait(700)
+        self.game.set_heartbeat_bpm(110, volume=.45)
+        yield from self.script.wait(700)
+        self.game.set_heartbeat_bpm(120, volume=.55)
+        yield from self.script.wait(900)
+        

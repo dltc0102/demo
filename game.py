@@ -83,7 +83,7 @@ class Game:
         """ player """
         self.player_w: int = 59
         self.player_h: int = 111
-        self.ground_h: int = 64
+        self.ground_h: int = 55
         self.player_x: int = 20
         self.player_y: int = self.screen_h - self.ground_h - self.player_h + 5
         self.player: Player = Player(self, (self.player_x, self.player_y), (self.player_w, self.player_h))
@@ -112,7 +112,7 @@ class Game:
         """ menu buttons """
         pause_menu_center_y: int = self.internal_h // 2
         main_menu_center_y: int = int(self.internal_h * 0.68)
-
+        self.menu_mouse_was_down: bool = False
         self.pause_menu_text_buttons: list[MenuTextButton] = self.create_centered_text_buttons(
             [("resume", "RESUME"), ("audio", "AUDIO"), ("quit", "QUIT")],
             center_y=pause_menu_center_y,
@@ -124,8 +124,12 @@ class Game:
             center_y=main_menu_center_y,
             gap=24
         )
+        self.credits_text_button: MenuTextButton = self.create_bottom_right_text_button("credits", "CREDITS", padding=10)
+        self.credits_font: pygame.font.Font = self.load_unicode_font(18)
+        self.credits_small_font: pygame.font.Font = self.load_unicode_font(15)
+        self.credits_items = self.load_credits()
+        self.credits_scroll_y = 0
 
-        self.menu_mouse_was_down: bool = False
 
         """ ghosts """
         self.ghosts: list[Ghost] = []
@@ -134,9 +138,26 @@ class Game:
         self.ghost_random_active: bool = True
         self.next_ghost_time: int = pygame.time.get_ticks() + random.randint(6000, 14000)
 
-        self.ghost_positive_dialogues: list[str] = ["you are doing okay", "keep breathing", "one step at a time", "you can pause", "you made it this far", "it is okay to slow down"]
-        self.ghost_neutral_dialogues: list[str] = ["walk forward", "look around", "someone is nearby", "keep going", "wait", "listen", "check the door", "where are you going?"]
-        self.ghost_negative_dialogues: list[str] = ["they are watching", "you look strange", "do not mess this up", "why are you stopping?", "they know", "you are too slow", "everyone noticed", "you cannot trust this"]
+        self.next_ghost_stress_time: int = 0
+        self.ghost_stress_interval: int = 850
+
+        self.ghost_positive_dialogues: list[str] = [
+            "you are doing okay", "keep breathing", "one step at a time", "you can pause",
+            "you made it this far", "it is okay to slow down", "you can check what is real",
+            "feet on the floor", "name five things you can see", "this feeling can pass",
+        ]
+        self.ghost_neutral_dialogues: list[str] = [
+            "walk forward", "look around", "someone is nearby", "keep going", "wait", "listen",
+            "check the door", "where are you going?", "did you forget something?", "turn around",
+            "not that way", "was that always there?", "maybe it moved", "maybe it did not",
+        ]
+        self.ghost_negative_dialogues: list[str] = [
+            "they are watching", "you look strange", "do not mess this up", "why are you stopping?",
+            "they know", "you are too slow", "everyone noticed", "you cannot trust this",
+            "they can hear you", "you said that wrong", "they are laughing", "do not drink that",
+            "your hands look wrong", "something is behind you", "you forgot again", "you are not safe",
+            "they put something in it", "the room is listening", "you are making it worse",
+        ]
 
         """ help hint """
         self.show_help: bool = True
@@ -165,12 +186,12 @@ class Game:
         while True:
             pygame.mouse.set_visible(True)
             self.render_start_menu()
-            result: str | None = self.render_text_buttons(self.main_menu_text_buttons)
-
+            result: str | None = self.render_text_buttons(self.main_menu_text_buttons + [self.credits_text_button])
             if result == "start":
                 menu_result: str | None = self.start_game_from_menu()
                 if menu_result == "menu": continue
             elif result == "audio": self.audio_menu(return_to="main")
+            elif result == "credits": self.credits_menu()
             elif result == "quit": self.quit_game()
             # result: str | None = self.render_buttons("main")
             # if result == "audio":
@@ -221,14 +242,18 @@ class Game:
 
     def audio_menu(self, return_to: str = "main") -> str:
         dragging: AudioDrag | None = None
-        back_img, *_ = load_image(self.asset_paths["back_button"], convert_white=True)
-        back_button: Button = Button((12, 12), back_img)
+        back_rect = pygame.Rect(10, 10, self.button_font.text_width("BACK") + 24, self.get_font_height(self.button_font) + 16)
+        back_button: MenuTextButton = ("back", "BACK", back_rect)
 
         while True:
             pygame.mouse.set_visible(True)
             self.display.fill((0, 0, 0))
 
-            if back_button.render(self.display): return return_to
+            result: str | None = self.render_text_buttons([back_button])
+            if result == "back":
+                self.save_audio_settings()
+                return return_to
+
             title: str = "Audio Settings"
             self.menu_font.render(self.display, title, (self.internal_w // 2 - self.menu_font.text_width(title) // 2, 20))
 
@@ -251,13 +276,49 @@ class Game:
             self.display.set_clip(old_clip)
             self.render_audio_scrollbar(content_top, content_h, total_h, max_scroll)
 
-            result, dragging = self.handle_input_audio_menu(return_to, dragging, content_top, content_h, total_h, max_scroll)
+            input_result, dragging = self.handle_input_audio_menu(return_to, dragging, content_top, content_h, total_h, max_scroll)
+            if input_result: return input_result
 
-            if result: return result
             self.scale_display_to_screen()
             pygame.display.update()
             self.clock.tick(self.fps)
 
+    def credits_menu(self) -> str:
+        back_rect = pygame.Rect(10, 10, self.button_font.text_width("BACK") + 24, self.get_font_height(self.button_font) + 16)
+        back_button: MenuTextButton = ("back", "BACK", back_rect)
+        while True:
+            pygame.mouse.set_visible(True)
+            self.display.blit(self.main_menu_bg, (0, 0))
+            dark = pygame.Surface((self.internal_w, self.internal_h), pygame.SRCALPHA)
+            dark.fill((0, 0, 0, 185))
+            self.display.blit(dark, (0, 0))
+            title = "CREDITS"
+            title_surf = self.credits_font.render(title, True, (237, 220, 147))
+            self.display.blit(title_surf, (self.internal_w // 2 - title_surf.get_width() // 2, 55))
+            result: str | None = self.render_text_buttons([back_button])
+            if result == "back": return "main"
+            content_top = 100
+            content_bottom = self.internal_h - 20
+            content_h = content_bottom - content_top
+            old_clip = self.display.get_clip()
+            self.display.set_clip(pygame.Rect(0, content_top, self.internal_w, content_h))
+            x = 70
+            y = content_top - self.credits_scroll_y
+            for section_name, items in self.credits_items.items():
+                y = self.render_credits_section(section_name, items, x, y)
+
+            self.display.set_clip(old_clip)
+            total_h = max(0, y - content_top + self.credits_scroll_y)
+            max_scroll = max(0, total_h - content_h)
+            self.credits_scroll_y = max(0, min(self.credits_scroll_y, max_scroll))
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT: self.quit_game()
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE: return "main"
+                if event.type == pygame.MOUSEWHEEL: self.credits_scroll_y = max(0, min(max_scroll, self.credits_scroll_y - event.y * 40))
+
+            self.scale_display_to_screen()
+            pygame.display.update()
+            self.clock.tick(self.fps)
 
 
     """ gameplay """
@@ -275,6 +336,7 @@ class Game:
             self.effects.render_glitch()
             self.render_floor()
             self.update_random_ghost_trigger()
+            self.update_ghost_stress(dt)
 
             stress: float = self.heart_rate.stress_amount()
             movement: list[float] = self.player_movement.copy()
@@ -285,6 +347,7 @@ class Game:
             self.heart_rate.render(self.display)
             self.render_heart_ui()
             self.render_player_status()
+            self.render_breathing_prompt()
 
             for ghost in self.ghosts[:]:
                 ghost.update()
@@ -345,23 +408,19 @@ class Game:
 
     """ mechanics """
     def activate_mechanic1(self) -> None:
-        if self.mechanic1_used:
+        if self.ghosts:
+            if all(getattr(ghost, "reached_target", False) for ghost in self.ghosts):
+                for ghost in self.ghosts:
+                    ghost.start_fade()
             return
 
         self.mechanic1_used = True
-
-        if self.ghosts:
-            if all(ghost.reached_target for ghost in self.ghosts):
-                for ghost in self.ghosts:
-                    ghost.start_fade()
-
-            return
-
         self.mechanic1_active = True
         self.ghosts = []
         used_points: list[Point] = []
+        ghost_count: int = random.randint(4, 7)
 
-        for idx in range(5):
+        for idx in range(ghost_count):
             move_x: float = self.player.pos[0]
             move_y: float = self.player.pos[1]
 
@@ -379,19 +438,30 @@ class Game:
 
             used_points.append((move_x, move_y))
 
-            dialogue: list[tuple[str, str]] = [
-                ("positive", random.choice(self.ghost_positive_dialogues)),
-                ("neutral", random.choice(self.ghost_neutral_dialogues)),
-                ("negative", random.choice(self.ghost_negative_dialogues)),
-            ]
+            dialogue: list[tuple[str, str]] = []
+            for _ in range(random.randint(3, 6)):
+                kind = random.choices(["positive", "neutral", "negative"], weights=[1, 3, 4], k=1)[0]
+                if kind == "positive":
+                    line = random.choice(self.ghost_positive_dialogues)
+                elif kind == "neutral":
+                    line = random.choice(self.ghost_neutral_dialogues)
+                else:
+                    line = random.choice(self.ghost_negative_dialogues)
+                dialogue.append((kind, line))
 
-            random.shuffle(dialogue)
-
-            ghost = Ghost(self, name=f"Ghost {idx + 1}", pos=self.player.pos.copy(), size=(self.player_w, self.player_h), move_to=(move_x, move_y), color=(255, 255, 255), dialogue=dialogue)
+            ghost = Ghost(
+                self,
+                name=f"Fuzz {idx + 1}",
+                pos=self.player.pos.copy(),
+                size=(self.player_w, self.player_h),
+                move_to=(move_x, move_y),
+                color=(8, 8, 10),
+                dialogue=dialogue
+            )
             self.ghosts.append(ghost)
 
     def update_random_ghost_trigger(self) -> None:
-        if self.mechanic1_used or not self.ghost_random_active or self.ghosts:
+        if not self.ghost_random_active or self.ghosts:
             return
 
         now: int = pygame.time.get_ticks()
@@ -403,6 +473,33 @@ class Game:
     def fade_ghosts(self) -> None:
         for ghost in self.ghosts:
             ghost.start_fade()
+
+
+    def update_ghost_stress(self, dt: float) -> None:
+        if not self.ghosts:
+            return
+
+        now: int = pygame.time.get_ticks()
+        if now < self.next_ghost_stress_time:
+            return
+
+        negative_pressure: int = sum(1 for ghost in self.ghosts if self.ghost_has_negative_dialogue(ghost))
+        amount: float = min(3.0, 0.45 + negative_pressure * 0.22)
+        self.heart_rate.add_stress_unit(amount)
+
+        if self.heart_rate.stress_units >= self.heart_rate.max_stress_units * 0.7:
+            self.heart_rate.start_panic_attack(coping_worked=random.random() < 0.65)
+
+        self.next_ghost_stress_time = now + self.ghost_stress_interval
+
+    def ghost_has_negative_dialogue(self, ghost: Any) -> bool:
+        possible_dialogues = getattr(ghost, "dialogue", None) or getattr(ghost, "dialogues", None) or []
+
+        for item in possible_dialogues:
+            if isinstance(item, tuple) and len(item) >= 2 and item[0] == "negative":
+                return True
+
+        return False
 
     def point_too_close(self, point: Point, existing_points: list[Point], min_radius: int = 30) -> bool:
         px, py = point
@@ -460,40 +557,13 @@ class Game:
             subtitle_y: int = title_y + 62 + (idx * y_padding)
             self.menu_font.render(self.display, subtitle, (subtitle_x, subtitle_y))
 
-    def render_buttons(self, btype: str) -> str | None:
-        buttons: list[tuple[str, Button]] = self.main_menu_buttons if btype == "main" else self.pause_menu_buttons
-        for name, button in buttons:
-            if not button.render(self.display): continue
-            if name == "start_button":
-                self.fade_to_black(duration=1200)
-                result: str | None = self.intro_scene_obj.run()
-
-                if result == "continue": result = self.first_scene_obj.run()
-                if result == "route_choice": result = self.route_choice_scene_obj.run()
-
-                if result == "quiet_route": result = self.quiet_route_scene_obj.run()
-
-                elif result == "busy_route": result = self.busy_route_scene_obj.run()
-
-                if result == "continue":
-                    loop_result: str | None = self.game_loop()
-                    if loop_result == "menu": return "menu"
-
-                elif result == "menu": return "menu"
-            elif name == "resume_button": return "resume"
-            elif name == "audio_button": return "audio"
-            elif name == "quit_button": return "quit"
-        return None
-
-    def draw_buttons_only(self, btype: str) -> None:
-        buttons: list[tuple[str, Button]] = self.main_menu_buttons if btype == "main" else self.pause_menu_buttons
-        for _, button in buttons:
-            self.display.blit(button.image, button.rect)
-
     def render_floor(self) -> None:
         floor_rect = pygame.Rect(0, self.screen_h - self.ground_h, self.internal_w, self.ground_h)
         pygame.draw.rect(self.display, (25, 25, 30), floor_rect)
         pygame.draw.line(self.display, (70, 70, 80), (0, self.screen_h - self.ground_h), (self.internal_w, self.screen_h - self.ground_h), 2)
+
+    def render_sfx_heartbeat_ui(self) -> None:
+        self.render_heart_ui()
 
     def render_heart_ui(self) -> None:
         bpm: int = int(self.heart_rate.bpm)
@@ -545,6 +615,27 @@ class Game:
 
         self.display.blit(box, (x, y))
         self.display.blit(text_surf, (x + padding_x, y + padding_y))
+
+
+    def render_breathing_prompt(self) -> None:
+        text: str = self.heart_rate.coping_state_text() if hasattr(self.heart_rate, "coping_state_text") else ""
+        if not text:
+            return
+
+        if self.heart_rate.get_state() == "psychosis":
+            color = (255, 40, 40)
+        elif self.breathe_pressed:
+            color = (210, 235, 255)
+        else:
+            color = (255, 220, 180)
+
+        text_surf: pygame.Surface = self.heart_ui_font.render(text, True, color)
+        x: int = self.internal_w // 2 - text_surf.get_width() // 2
+        y: int = 82
+        box: pygame.Surface = pygame.Surface((text_surf.get_width() + 20, text_surf.get_height() + 10), pygame.SRCALPHA)
+        box.fill((0, 0, 0, 170))
+        self.display.blit(box, (x - 10, y - 5))
+        self.display.blit(text_surf, (x, y))
 
     def show_help_hints(self) -> None:
         hints: list[str] = [
@@ -613,6 +704,7 @@ class Game:
                 self.button_font.render(self.display, text, (text_x, text_y))
 
                 if clickable and mouse_down and not self.menu_mouse_was_down:
+                    self.sfx.play_key("button_click", volume=0.5)
                     clicked_action = action
 
             else:
@@ -646,6 +738,90 @@ class Game:
         temp.blit(tint, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
         self.display.blit(temp, pos)
         
+    def create_bottom_right_text_button(self, action: str, text: str, padding: int = 10, padding_x: int = 16, padding_y: int = 8) -> MenuTextButton:
+        button_w = self.button_font.text_width(text) + padding_x * 2
+        button_h = self.get_font_height(self.button_font) + padding_y * 2
+        rect = pygame.Rect(0, 0, button_w, button_h)
+        rect.bottomright = (self.internal_w - padding, self.internal_h - padding)
+        return action, text, rect
+    
+    def load_unicode_font(self, size: int) -> pygame.font.Font:
+        font_paths = [
+            "assets/fonts/NotoSansCJK-Regular.ttc",
+            "assets/fonts/NotoSansSC-Regular.ttf",
+            "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/wqy-microhei/wqy-microhei.ttc",
+        ]
+
+        for path in font_paths:
+            try: return pygame.font.Font(path, size)
+            except Exception: pass
+
+        return pygame.font.SysFont("arial", size)
+
+    def render_unicode_text(self, font: pygame.font.Font, text: str, pos: tuple[int, int], color: tuple[int, int, int] = (235, 235, 235)) -> int:
+        surf = font.render(text, True, color)
+        self.display.blit(surf, pos)
+        return surf.get_height()
+
+    def render_credits_section(self, section_name: str, items: list[dict], x: int, y: int) -> int:
+        title = section_name.replace("_", " ").upper()
+        y += self.render_unicode_text(self.credits_font, title, (x, y), (237, 220, 147)) + 14
+        for item in items:
+            if section_name == "fonts":
+                y = self.render_font_credit_item(item, x + 16, y)
+            else:
+                y = self.render_simple_credit_item(item, x + 16, y)
+        return y + 14
+
+    def render_simple_credit_item(self, item: dict, x: int, y: int) -> int:
+        name = item.get("credit", item.get("name", item.get("title", "Unnamed")))
+        source = item.get("source", "")
+        author = item.get("author", "")
+        note = item.get("note", "")
+
+        y += self.render_unicode_text(self.credits_small_font, name, (x, y), (235, 235, 235)) + 5
+
+        if author:
+            y += self.render_unicode_text(self.credits_small_font, f"Author: {author}", (x + 16, y), (200, 200, 200)) + 4
+
+        if source and source not in name:
+            y += self.render_unicode_text(self.credits_small_font, f"Source: {source}", (x + 16, y), (200, 200, 200)) + 4
+
+        if note:
+            y += self.render_unicode_text(self.credits_small_font, note, (x + 16, y), (200, 200, 200)) + 4
+
+        return y + 14
+    
+    def render_font_credit_item(self, item: dict, x: int, y: int) -> int:
+        name = item.get("name", "Unknown font")
+        credit = item.get("credit", "")
+        sample = item.get("sample", name)
+        font_type = item.get("font_type", "ttf")
+        path = item.get("path", "")
+
+        y += self.render_unicode_text(self.credits_small_font, f"{name} — {credit}", (x, y), (235, 235, 235)) + 6
+
+        if font_type == "bitmap":
+            try:
+                sample_font = Font(path, scale=1)
+                sample_font.render(self.display, sample, (x + 16, y))
+                y += self.get_font_height(sample_font) + 18
+            except Exception as e:
+                y += self.render_unicode_text(self.credits_small_font, f"Could not load sample: {e}", (x + 16, y), (180, 180, 180)) + 18
+        else:
+            try:
+                sample_font = pygame.font.Font(path, 20)
+                surf = sample_font.render(sample, True, (235, 235, 235))
+                self.display.blit(surf, (x + 16, y))
+                y += surf.get_height() + 18
+            except Exception as e:
+                y += self.render_unicode_text(self.credits_small_font, f"Could not load sample: {e}", (x + 16, y), (180, 180, 180)) + 18
+
+        return y
+
+
 
     """ audio helpers """
     def load_audio_settings(self) -> None:
@@ -686,6 +862,7 @@ class Game:
                 self.quit_game()
 
             if is_keydown and event.key == pygame.K_ESCAPE:
+                self.save_audio_settings()
                 return return_to, dragging
 
             if using_mwheel:
@@ -787,31 +964,6 @@ class Game:
 
         return final_bg
 
-    def create_centered_buttons(self, asset_keys: list[str], scale: int | float = 1) -> list[tuple[str, Button]]:
-        center_x: int = self.screen_w // 2
-        start_y: int = (self.screen_h // 3) * 2
-        gap: int = 10
-
-        button_data: list[tuple[str, pygame.Surface, int, int]] = []
-        total_height: int = 0
-
-        for asset_key in asset_keys:
-            img, w, h = load_image(self.asset_paths[asset_key])
-            button_data.append((asset_key, img, w, h))
-            total_height += h
-
-        total_height += gap * (len(button_data) - 1)
-
-        current_y: int = start_y - total_height // 2
-        buttons: list[tuple[str, Button]] = []
-
-        for asset_key, img, w, h in button_data:
-            button = Button((center_x - w // 2, current_y), img, scale)
-            buttons.append((asset_key, button))
-            current_y += h + gap
-
-        return buttons
-
     def get_audio_scrollbar_rect(self, content_top: int, content_h: int, total_h: int, max_scroll: int) -> pygame.Rect | None:
         if max_scroll <= 0:
             return None
@@ -846,7 +998,7 @@ class Game:
                 if event.type == pygame.QUIT: self.quit_game()
 
             self.render_start_menu()
-            self.render_text_buttons(self.main_menu_text_buttons, clickable=False)
+            self.render_text_buttons(self.main_menu_text_buttons + [self.credits_text_button], clickable=False)
             # self.draw_buttons_only("main")
             self.display.blit(fade, (0, 0))
 
@@ -863,6 +1015,21 @@ class Game:
     def create_screen(self) -> pygame.Surface:
         pygame.display.set_caption(self.game_name)
         return pygame.display.set_mode((self.screen_w, self.screen_h))
+
+
+    def start_heartbeat(self, bpm: float = 70, volume: float | None = None) -> None:
+        self.heart_rate.force_bpm(bpm)
+        if volume is None:
+            self.sfx.start_heartbeat(bpm=bpm)
+        else:
+            self.sfx.start_heartbeat(bpm=bpm, volume=volume)
+
+    def set_heartbeat_bpm(self, bpm: float, volume: float | None = None) -> None:
+        self.heart_rate.force_bpm(bpm)
+        if volume is None:
+            self.sfx.set_heartbeat_bpm(bpm)
+        else:
+            self.sfx.set_heartbeat_bpm(bpm, volume=volume)
 
     def get_ticks(self) -> int:
         return pygame.time.get_ticks()
@@ -882,6 +1049,7 @@ class Game:
 
     def get_font_height(self, font: Font) -> int:
         return max(character.get_height() for character in font.characters.values())
+
 
 
     """ dev """
@@ -938,15 +1106,27 @@ class Game:
         elif phase_name == "choice_maker":
             self.route_choice_scene_obj.reset()
          
+
+
     """ other """
     def quit_game(self) -> None:
         pygame.quit()
         sys.exit()
 
+    def load_credits(self) -> dict[str, list[dict[str, str]]]:
+        try:
+            with open("credits.json", "r", encoding="utf-8") as c:
+                return json.load(c)
+        except FileNotFoundError:
+            return {"sfx": [], "voices": [], "music": []}
+        except json.JSONDecodeError as e:
+            print(f"[CREDITS JSON ERROR] {e}")
+            return {"sfx": [], "voices": [], "music": []}
+
+
 
 def main() -> None:
     Game().run()
-
 
 if __name__ == "__main__":
     main()

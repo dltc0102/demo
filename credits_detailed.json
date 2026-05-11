@@ -1,0 +1,199 @@
+{
+  "special_thanks": [
+    {
+      "name": "People who have requested anonymity",
+      "role": "Interviewed lived experiences",
+      "note": "Thank you for sharing your experiences and helping shape the representation."
+    }
+  ],
+  "sfx": [
+    {
+      "artist": "universfield",
+      "tracks": ["heartbeat_single", "very infectious laughter"],
+      "source": "Pixabay",
+      "license": "Content License"
+    },
+    {
+      "artist": "hasin2004",
+      "tracks": ["drinking sfx"],
+      "source": "Pixabay",
+      "license": "Content License"
+    },
+    {
+      "artist": "Jurij - SoundReality",
+      "tracks": ["button_click"],
+      "source": "Pixabay",
+      "license": "Content License"
+    },
+    {
+      "artist": "Neha Pandey",
+      "tracks": ["Cackle"],
+      "source": "Pixabay",
+      "license": "Content License"
+    },
+    {
+      "artist": "Zero Nebulus",
+      "tracks": ["fridge door open/close"],
+      "source": "Pixabay",
+      "license": "Content License"
+    },
+    {
+      "artist": "Tanwer Aman",
+      "tracks": ["pouring milk"],
+      "source": "Pixabay",
+      "license": "Content License"
+    },
+    {
+      "artist": "StuleStu (Stuart Molding)",
+      "tracks": ["Male Hyperventilating (Panicked Breathing)"],
+      "source": "Pixabay",
+      "license": "Content License"
+    },
+    {
+      "artist": "free sound creator",
+      "tracks": ["walking on wood"],
+      "source": "Pixabay",
+      "license": "Content License"
+    },
+    {
+      "artist": "freesound_community",
+      "tracks": [
+        "laughter",
+        "opening pill bottle",
+        "whispers",
+        "paper crumple",
+        "screwing water bottle cap on and off",
+        "ding",
+        "glass on table",
+        "drinking",
+        "page_flip",
+        "walking_on_tiles",
+        "schizophrenic voices",
+        "muffled talking"
+      ],
+      "source": "Pixabay",
+      "license": "Content License"
+    }
+  ],
+  "voices": [
+    {
+      "source": "ElevenLabs",
+      "license": "ElevenLabs license",
+      "data": [
+        {
+          "artist": "Joe (Confident Idiot)",
+          "tracks": [
+            "you're like a turtle with instruction",
+            "that wasn't there before",
+            "somethin's wrong in that noggin' of yours",
+            "why are you still drinking it?"
+          ]
+        },
+        {
+          "artist": "Andrew Lo",
+          "tracks": ["别信他!!他不是真人!你不要被骗了"]
+        },
+        {
+          "artist": "Jin",
+          "tracks": ["你怎么还没睡呢？"]
+        },
+        {
+          "artist": "Shan",
+          "tracks": ["这奶已经过期了！", "你怎么那么慢", "笑死我了"]
+        },
+        {
+          "artist": "Sable",
+          "tracks": ["i think your lamp has opinions"]
+        },
+        {
+          "artist": "Liam",
+          "tracks": ["you forgot to lock the door", "don't trust him"]
+        },
+        {
+          "artist": "Jet Du",
+          "tracks": ["don't trust him", "don't answer", "not this one", "he heard you", "why are you so slow", "do it again"]
+        },
+        {
+          "artist": "Corvin Lark",
+          "tracks": ["don't trust them", "that milk's expired", "you look so stupid"]
+        },
+        {
+          "artist": "Luca",
+          "tracks": ["don't drink it"]
+        },
+        {
+          "artist": "Mia",
+          "tracks": ["groceries! groceries!"]
+        },
+        {
+          "artist": "Alex Wright",
+          "tracks": ["there's a horse in the backyard!"]
+        },
+        {
+          "artist": "Hannah",
+          "tracks": [
+            "why are you so slow",
+            "took you long enough",
+            "he's opening the fridge again",
+            "you're being watched",
+            "don't drink that",
+            "what are you doing",
+            "you look stupid",
+            "you're useless",
+            "your mom's not here"
+          ]
+        },
+        {
+          "artist": "Hale",
+          "tracks": ["it wasn't??!"]
+        },
+        {
+          "artist": "Sophie",
+          "tracks": ["drink it!", "don't drink it"]
+        },
+        {
+          "artist": "Gentle Gemma",
+          "tracks": ["then go get a glass of milk?"]
+        },
+        {
+          "artist": "Annie K.",
+          "tracks": ["don't touch that", "don't drink it"]
+        },
+        {
+          "artist": "Janelle",
+          "tracks": ["they're all looking at you", "look behind you"]
+        },
+        {
+          "artist": "Bill Oxley",
+          "tracks": ["you heard that too didn't you? there's someone at the door"]
+        },
+        {
+          "artist": "Minnie",
+          "tracks": ["get out of the house already", "you look like a confused potato", "demon fridge", "poopy paper rollss"]
+        }
+      ]
+    }
+  ],
+  "information_sources": [
+    {
+      "title": "Schizophrenia symptoms",
+      "author": "NHS",
+      "source": "NHS website",
+      "note": "Used for general symptom research and representation guidance."
+    }
+  ],
+  "assets - fonts": [
+    {
+      "name": "pixel font (white/red)",
+      "author": "DaFluffyPotato (YouTube)"
+    },
+    {
+      "name": "Retrogression Regular",
+      "author": "slnc. (Behance)"
+    },
+    {
+      "name": "Minecraftia Regular",
+      "source": "Andrew Tyler (dafont.com)"
+    }
+  ]
+}

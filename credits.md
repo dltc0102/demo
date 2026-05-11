@@ -17,11 +17,8 @@ Retrogression (cursive pixel font) -- by slnc. on Behance (https://www.behance.n
 Voices:
 Janelle (ElevenLabs)
 Bill Oxley (ElevenLabs)
-Arabella (ElevenLabs)
-Gleam Gloom (ElevenLabs)
 "don't touch that" -- Annie K. (ElevenLabs)
 "glass of milk" -- Gentle Gemma (ElevenLabs)
-"that milk's expired" -- Ezekiel (ElevenLabs)
 "drink it!" -- Sophie (ElevenLabs)
 
 Software Used:

@@ -263,22 +263,15 @@ class ShakeThought:
         self.next_escalate = random.randint(300, 600)
 
     def update(self, dt: float) -> None:
-        if self.finished:
-            return
-
+        if self.finished: return
         now = pygame.time.get_ticks()
-
         self.escalate_timer += dt * 1000
         if self.escalate_timer >= self.next_escalate:
             self.escalate_timer = 0
             self.next_escalate = random.randint(200, 500)
-
             self.shake_level = min(self.shake_level + 1, 6)
             self.scale = 1 + min(self.shake_level * 0.22, 1.35)
-
-            # glitch happens at the same moment the text scales
             self.glitch_until = now + random.randint(90, 180)
-
         if now - self.start >= self.stall:
             self.finished = True
 
@@ -286,8 +279,6 @@ class ShakeThought:
         glitched = source.copy()
         width = source.get_width()
         height = source.get_height()
-
-        # horizontal slice glitches
         for _ in range(random.randint(4, 8)):
             slice_h = random.randint(2, 6)
             slice_y = random.randint(0, max(0, height - slice_h))
@@ -297,44 +288,33 @@ class ShakeThought:
             slice_surf = source.subsurface(slice_rect).copy()
 
             glitched.blit(slice_surf, (offset_x, slice_y))
-
-        # faint duplicated shadows
         ghost = source.copy()
         ghost.set_alpha(90)
         glitched.blit(ghost, (random.randint(-3, 3), random.randint(-2, 2)))
-
         return glitched
 
     def render(self, surface: pygame.Surface, offset: tuple = (0, 0)) -> None:
-        if self.finished:
-            return
-
+        if self.finished: return
         now = pygame.time.get_ticks()
         is_glitching = now < self.glitch_until
-
         max_width = 200
+        raw = pygame.Surface((max_width, 80), pygame.SRCALPHA)
+        self.font_white.render_wrapped(raw, self.text, (0, 0), max_width)
+        bounds = raw.get_bounding_rect()
 
-        # white text only
-        temp = pygame.Surface((max_width, 40), pygame.SRCALPHA)
-        self.font_white.render_wrapped(temp, self.text, (0, 0), max_width)
-
+        if bounds.width <= 0 or bounds.height <= 0: return
+        temp = pygame.Surface((bounds.width, bounds.height), pygame.SRCALPHA)
+        temp.blit(raw, (0, 0), bounds)
         if self.scale != 1:
             new_w = max(1, int(temp.get_width() * self.scale))
             new_h = max(1, int(temp.get_height() * self.scale))
             temp = pygame.transform.scale(temp, (new_w, new_h))
 
-        if is_glitching:
-            temp = self.glitch_surface(temp)
-
+        if is_glitching: temp = self.glitch_surface(temp)
         target_rect = self.target.rect()
         x = target_rect.centerx - offset[0] - temp.get_width() // 2
         y = target_rect.top - offset[1] - 50
-
-        # normal shaking/jitter
-        shake_amount = min(1 + self.shake_level, 7)
-        x += random.randint(-shake_amount, shake_amount)
         y += random.randint(-2, 2)
-
         surface.blit(temp, (int(x), int(y)))
 
 class ThoughtManager:
