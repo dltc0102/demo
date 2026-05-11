@@ -68,6 +68,9 @@ class Player(PhysicsEntity):
 
         self.last_movement_x = 0
 
+        self.outfit = "default"
+        self.outfit_img = None
+
         self.base_image = None
         if self.idle_frames:
             self.base_image = self.idle_frames[0]
@@ -82,6 +85,26 @@ class Player(PhysicsEntity):
             self.game.player_w = self.size[0]
             self.game.player_h = self.size[1]
 
+    def load_outfit(self, path: str) -> pygame.Surface | None:
+        try:
+            img = pygame.image.load(path).convert()
+            img.set_colorkey((255, 255, 255))
+            img = self.scale_to_width(img, 64)
+            return img
+        except pygame.error as e:
+            print(f"[player] failed to load outfit {path}: {e}")
+            return None
+
+    def set_outfit(self, outfit: str):
+        # outfit: "default" | "back" | "outdoors"
+        self.outfit = outfit
+        if outfit == "back":
+            self.outfit_img = self.load_outfit("assets/entities/player/sloopy_back.png")
+        elif outfit == "outdoors":
+            self.outfit_img = self.load_outfit("assets/entities/player/sloopy_outdoors.png")
+        else:
+            self.outfit_img = None
+            
     def fit_sprite_to_canvas(self, img, canvas_size):
         canvas_w, canvas_h = canvas_size
         visible_rect = img.get_bounding_rect()
@@ -100,6 +123,11 @@ class Player(PhysicsEntity):
         y = canvas_h - new_h
         final_img.blit(scaled, (x, y))
         return final_img
+    
+    def scale_to_width(self, img, target_w):
+        orig_w, orig_h = img.get_size()
+        scale = target_w / orig_w
+        return pygame.transform.scale(img, (target_w, int(orig_h * scale)))
 
     def load_frames(self, folder: Path, pattern: str, animation_name: str) -> list:
         if not folder.exists():
@@ -118,6 +146,8 @@ class Player(PhysicsEntity):
 
                 if animation_name == "walk":
                     img = self.fit_to_idle_visible_size(img)
+
+                img = self.scale_to_width(img, 64)  # ← add this
                 frames.append(img)
 
             except pygame.error as error:
@@ -126,7 +156,7 @@ class Player(PhysicsEntity):
         if not frames:
             print(f"[player] no {animation_name} frames found in {folder}")
         return frames
-
+    
     def jump(self):
         if self.grounded:
             self.velocity[1] = -self.jump_strength
@@ -179,6 +209,8 @@ class Player(PhysicsEntity):
         return pygame.transform.flip(image, True, False)
     
     def get_current_image(self):
+        if self.outfit_img is not None: return self.outfit_img
+
         if self.animation_state == "walk" and self.walk_frames:
             frames = self.walk_frames
         elif self.idle_frames:
@@ -189,7 +221,6 @@ class Player(PhysicsEntity):
             return None
 
         image = frames[self.frame_index % len(frames)]
-
         if self.game.player_facing != self.sprite_default_facing:
             image = self.flip(image)
         return image

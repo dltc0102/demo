@@ -12,6 +12,14 @@ class SoundEffects:
         self.sound_aliases = {
             "heartbeat": "heartbeat_single",
             "speech_sfx": "blip",
+            "wood_left1": "walking_on_wood_left1",
+            "wood_left2": "walking_on_wood_left2",
+            "wood_right1": "walking_on_wood_right1",
+            "wood_right2": "walking_on_wood_right2",
+            "tiles_left1": "walking_on_tiles_left1",
+            "tiles_left2": "walking_on_tiles_left2",
+            "tiles_right1": "walking_on_tiles_right1",
+            "tiles_right2": "walking_on_tiles_right2",
         }
 
         """ footstep randomizer """
@@ -53,17 +61,13 @@ class SoundEffects:
             pygame.mixer.Channel(5),
         ]
         self.speech_channel = pygame.mixer.Channel(6)
-        self.last_speech_blip_time = 0
-        self.speech_blips = []
-        base_speech = self.load_sound("speech_sfx")
-        if base_speech:
-            self.speech_blips = self.create_speech_blips(base_speech)
 
         self.last_heartbeat: int        = 0
         self.next_foot: str             = "left"
         self.last_footstep_time: int    = 0
         self.heartbeat_active = False
         self.heartbeat_bpm = 70
+        self.last_speech_blip_time = 0
     
     def load_mp3_folder(self, folder):
         folder = Path(folder)
@@ -97,6 +101,7 @@ class SoundEffects:
         self.heartbeat_active = True
         self.heartbeat_bpm = bpm
         self.heartbeat_sound.set_volume(volume)
+        yield
 
     def stop_heartbeat(self):
         self.heartbeat_active = False
@@ -147,16 +152,28 @@ class SoundEffects:
         sound = self.load_sound(key)
         self.play(sound)
 
-    def play_voice(self, sound_key: str):
-        voice = self.load_voice(sound_key)
-        if not voice: return
+    def play_voice(self, sound_key: str, volume: float | None = None) -> pygame.mixer.Channel | None:
+        voice: pygame.mixer.Sound | None = self.load_voice(sound_key)
+        if not voice:
+            raise ValueError(f"[MISSING VOICE] {sound_key}")
+
+        if volume is not None:
+            voice.set_volume(volume)
+
         for channel in self.voice_channels:
             if not channel.get_busy():
                 channel.play(voice)
-                return
+                return channel
 
-        random.choice(self.voice_channels).play(voice)
+        channel = random.choice(self.voice_channels)
+        channel.play(voice)
+        return channel
 
+    def play_voice_and_wait(self, sound_key: str, volume: float | None = None):
+        channel: pygame.mixer.Channel | None = self.play_voice(sound_key, volume)
+        if not channel: return
+        while channel.get_busy(): yield
+            
     def milk_cap(self, screwed_on=True):
         sounds = self.unscrew_sounds if screwed_on else self.screw_on_sounds
         sounds = [sound for sound in sounds if sound]
@@ -182,37 +199,25 @@ class SoundEffects:
         shifted = shifted.astype(arr.dtype)
         return pygame.sndarray.make_sound(shifted)
 
-    def create_speech_blips(self, base_sound):
-        pitch_values: list[float] = [ 0.82, 0.9, 0.96, 1.0, 1.05, 1.12, 1.22, ]
-        blips = []
-        for pitch in pitch_values:
-            shifted = self.pitch_shift_sound(base_sound, pitch)
-            if shifted:
-                shifted.set_volume(0.18)
-                blips.append(shifted)
-        return blips
-
-    def play_speech_blip(self, char=None, emotion="normal"):
-        now = pygame.time.get_ticks()
-        if not hasattr(self, "last_speech_blip_time"):
-            self.last_speech_blip_time = 0
-        if now - self.last_speech_blip_time < 22: return
-        self.last_speech_blip_time = now
+    def play_speech_blip(self, volume: float = 0.16, maxtime: int = 45) -> None:
         sound = self.load_sound("speech_sfx")
         if not sound: sound = self.load_sound("blip")
         if not sound: return
-
-        volume = 0.16
-        if emotion == "question": volume = 0.18
-        elif emotion == "exclaim": volume = 0.22
-        elif emotion == "hesitant": volume = 0.12
-        elif emotion == "cutoff": volume = 0.14
-        sound.set_volume(volume)
-
+        pitch = random.uniform(0.9, 1.15)
+        shifted = self.pitch_shift_sound(sound, pitch)
+        if not shifted: return
+        shifted.set_volume(volume)
         if hasattr(self, "speech_channel"):
-            self.speech_channel.play(sound)
+            self.speech_channel.play(shifted, maxtime=maxtime)
         else:
-            sound.play()
+            shifted.play(maxtime=maxtime)
 
+    def update_speech_blips(self, is_typing: bool, speech_blip_interval: float=28) -> None:
+        if not is_typing: return
+        now = pygame.time.get_ticks()
+        if now - self.last_speech_blip_time < self.speech_blip_interval: return
+        self.last_speech_blip_time = now
+        self.game.sfx.play_speech_blip()
+        
     def is_voice_playing(self) -> bool:
         return any(channel.get_busy() for channel in self.voice_channels)

@@ -181,6 +181,8 @@ class RouteChoiceScene:
             if event.type == pygame.QUIT:
                 self.game.quit_game()
 
+            if self.game.handle_dev_keys(event): continue
+            
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     return "menu"

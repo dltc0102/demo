@@ -2,7 +2,7 @@ import pygame, math, random
 from scripts.ui.font import Font
 
 class DialogueObject:
-    def __init__(self, game, text, target, stall=1500):
+    def __init__(self, game, text, target, stall=1500, interval: int = 28):
         self.game = game
         self.lines: list[str] = text if isinstance(text, list) else [text]
         self.target = target
@@ -17,7 +17,9 @@ class DialogueObject:
 
         self.visible_chars = 0
         self.char_timer = 0
-        self.char_delay = 28
+        self.char_delay = interval
+        self.speech_blip_interval = interval
+        self.last_speech_blip_time = 0
         self.current_alpha = 0
         self.line_finished_time = None
         self.pause_until = 0
@@ -64,26 +66,33 @@ class DialogueObject:
         }
         return delays[char] if char in delays.keys() else self.char_delay
     
+    def update_speech_blips(self, is_typing: bool, speech_blip_interval: float | None = None) -> None:
+        if not is_typing: return
+        interval = self.speech_blip_interval if speech_blip_interval is None else speech_blip_interval
+        now = pygame.time.get_ticks()
+        if now - self.last_speech_blip_time < interval: return
+        self.last_speech_blip_time = now
+        self.game.sfx.play_speech_blip()
+        
     def update_typing(self):
         now = pygame.time.get_ticks()
         if now < self.pause_until: return
         text = self.current_text()
+        is_typing = self.visible_chars < len(text)
+        self.update_speech_blips(is_typing)
         if self.visible_chars >= len(text):
             if self.line_finished_time is None:
                 self.line_finished_time = now
             return
-        
-        dt = pygame.time.Clock().get_time()
-        self.char_timer += max(16, dt)
+
+        self.char_timer += max(16, self.game.clock.get_time())
         while self.visible_chars < len(text) and self.char_timer >= self.char_delay:
             char = text[self.visible_chars]
             self.visible_chars += 1
-            self.char_timer = 0
-            self.pause_until = now + self.next_char_delay(char)
-            if char.isalpha():
-                emotion = self.get_speech_emotion(text, self.visible_chars - 1)
-                self.game.sfx.play_speech_blip(char, emotion)
-            break
+            self.char_timer -= self.char_delay
+            if char in (".", ",", "?", "!", "-"):
+                self.pause_until = now + self.next_char_delay(char)
+                break
     
     def get_speech_emotion(self, text, index):
         remaining_text = text[index:]
@@ -145,8 +154,8 @@ class DialogueManager:
         self.game = game
         self.dialogues = []
 
-    def dialogue_object(self, text, target, stall=1500):
-        dialogue = DialogueObject(self.game, text, target, stall)
+    def dialogue_object(self, text, target, stall=1500, interval: int = 28):
+        dialogue = DialogueObject(self.game, text, target, stall, interval)
         self.dialogues.append(dialogue)
         return dialogue
 

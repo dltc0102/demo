@@ -245,10 +245,108 @@ class RaceThought(BaseThought):
         text_surf: pygame.Surface = self.make_text_surface()
         surface.blit(text_surf, (int(x), int(y)))
 
+class ShakeThought:
+    def __init__(self, text: str, target, stall: int = 2200) -> None:
+        self.text = str(text)
+        self.target = target
+        self.font_white = Font("assets/fonts/large_font_white.png", scale=1)
+
+        self.stall = stall
+        self.start = pygame.time.get_ticks()
+        self.finished = False
+
+        self.shake_level = 0
+        self.scale = 1.0
+
+        self.glitch_until = 0
+        self.escalate_timer = 0
+        self.next_escalate = random.randint(300, 600)
+
+    def update(self, dt: float) -> None:
+        if self.finished:
+            return
+
+        now = pygame.time.get_ticks()
+
+        self.escalate_timer += dt * 1000
+        if self.escalate_timer >= self.next_escalate:
+            self.escalate_timer = 0
+            self.next_escalate = random.randint(200, 500)
+
+            self.shake_level = min(self.shake_level + 1, 6)
+            self.scale = 1 + min(self.shake_level * 0.22, 1.35)
+
+            # glitch happens at the same moment the text scales
+            self.glitch_until = now + random.randint(90, 180)
+
+        if now - self.start >= self.stall:
+            self.finished = True
+
+    def glitch_surface(self, source: pygame.Surface) -> pygame.Surface:
+        glitched = source.copy()
+        width = source.get_width()
+        height = source.get_height()
+
+        # horizontal slice glitches
+        for _ in range(random.randint(4, 8)):
+            slice_h = random.randint(2, 6)
+            slice_y = random.randint(0, max(0, height - slice_h))
+            offset_x = random.randint(-8, 8)
+
+            slice_rect = pygame.Rect(0, slice_y, width, slice_h)
+            slice_surf = source.subsurface(slice_rect).copy()
+
+            glitched.blit(slice_surf, (offset_x, slice_y))
+
+        # faint duplicated shadows
+        ghost = source.copy()
+        ghost.set_alpha(90)
+        glitched.blit(ghost, (random.randint(-3, 3), random.randint(-2, 2)))
+
+        return glitched
+
+    def render(self, surface: pygame.Surface, offset: tuple = (0, 0)) -> None:
+        if self.finished:
+            return
+
+        now = pygame.time.get_ticks()
+        is_glitching = now < self.glitch_until
+
+        max_width = 200
+
+        # white text only
+        temp = pygame.Surface((max_width, 40), pygame.SRCALPHA)
+        self.font_white.render_wrapped(temp, self.text, (0, 0), max_width)
+
+        if self.scale != 1:
+            new_w = max(1, int(temp.get_width() * self.scale))
+            new_h = max(1, int(temp.get_height() * self.scale))
+            temp = pygame.transform.scale(temp, (new_w, new_h))
+
+        if is_glitching:
+            temp = self.glitch_surface(temp)
+
+        target_rect = self.target.rect()
+        x = target_rect.centerx - offset[0] - temp.get_width() // 2
+        y = target_rect.top - offset[1] - 50
+
+        # normal shaking/jitter
+        shake_amount = min(1 + self.shake_level, 7)
+        x += random.randint(-shake_amount, shake_amount)
+        y += random.randint(-2, 2)
+
+        surface.blit(temp, (int(x), int(y)))
+
 class ThoughtManager:
     def __init__(self) -> None:
         self.cloud_thoughts: list[CloudThought] = []
         self.race_thoughts: list[RaceThought] = []
+        self.shake_thoughts: list[ShakeThought] = []
+
+    def shakethink(self, text: str, target, stall: int = 2200) -> "ShakeThought":
+        thought = ShakeThought(text, target, stall=stall)
+        self.shake_thoughts.append(thought)
+        return thought
 
     def cloudthink(self, lines: str | list[str], target, stall: int = 1400) -> CloudThought:
         thought: CloudThought = CloudThought(lines, target, stall=stall)
@@ -257,6 +355,8 @@ class ThoughtManager:
 
     def racethink(self, lines: str | list[str], target, stall: int = 700) -> RaceThought:
         thought: RaceThought = RaceThought(lines, target, stall=stall)
+        self.race_thoughts.append(thought)
+        return thought
 
     def update(self, dt: float) -> None:
         for thought in self.cloud_thoughts[:]:
@@ -266,7 +366,17 @@ class ThoughtManager:
         for thought in self.race_thoughts[:]:
             thought.update(dt)
             if thought.finished: self.race_thoughts.remove(thought)
+        
+        for thought in self.shake_thoughts[:]:
+            thought.update(dt)
+            if thought.finished: self.shake_thoughts.remove(thought)
 
     def render(self, surface: pygame.Surface, offset: tuple[int | float, int | float] = (0, 0)) -> None:
         for thought in self.cloud_thoughts: thought.render(surface, offset)
         for thought in self.race_thoughts: thought.render(surface, offset)
+        for thought in self.shake_thoughts: thought.render(surface, offset)
+
+    def clear(self) -> None:
+        self.cloud_thoughts.clear()
+        self.race_thoughts.clear()
+        self.shake_thoughts.clear()
