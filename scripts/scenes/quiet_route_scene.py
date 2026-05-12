@@ -139,7 +139,7 @@ class QuietRouteScene:
         )
 
     def sequence(self):
-        self.game.sfx.set_heartbeat_bpm(82, volume=0.22)
+        self.game.sfx.set_heartbeat_bpm(82)
 
         yield from self.game.cutscene.wait(600)
 
@@ -174,7 +174,7 @@ class QuietRouteScene:
             gap=450
         )
 
-        self.game.sfx.set_heartbeat_bpm(95, volume=0.28)
+        self.game.sfx.set_heartbeat_bpm(95)
 
         yield from self.game.cutscene.say(
             [
@@ -196,7 +196,7 @@ class QuietRouteScene:
             stall=1500
         )
 
-        self.game.sfx.set_heartbeat_bpm(78, volume=0.18)
+        self.game.sfx.set_heartbeat_bpm(78)
 
         yield from self.game.cutscene.wait(900)
 

@@ -155,7 +155,7 @@ class BusyRouteScene:
             )
 
     def sequence(self):
-        self.game.sfx.set_heartbeat_bpm(88, volume=0.25)
+        self.game.sfx.set_heartbeat_bpm(88)
 
         yield from self.game.cutscene.wait(600)
 
@@ -175,7 +175,7 @@ class BusyRouteScene:
             stall=1500
         )
 
-        self.game.sfx.set_heartbeat_bpm(105, volume=0.35)
+        self.game.sfx.set_heartbeat_bpm(105)
 
         yield from self.game.cutscene.racethink(
             [
@@ -201,7 +201,7 @@ class BusyRouteScene:
 
         yield from self.game.cutscene.voice("whats_wrong_with_you")
 
-        self.game.sfx.set_heartbeat_bpm(118, volume=0.4)
+        self.game.sfx.set_heartbeat_bpm(118)
 
         yield from self.game.cutscene.cloudthink(
             [
@@ -215,7 +215,7 @@ class BusyRouteScene:
             stall=1400
         )
 
-        self.game.sfx.set_heartbeat_bpm(85, volume=0.22)
+        self.game.sfx.set_heartbeat_bpm(85)
 
         yield from self.game.cutscene.wait(900)
 

@@ -17,6 +17,9 @@ from scripts.scenes.first_scene import FirstScene
 from scripts.scenes.route_choice_scene import RouteChoiceScene
 from scripts.scenes.quiet_route_scene import QuietRouteScene
 from scripts.scenes.busy_route_scene import BusyRouteScene
+from scripts.systems.ghost_manager import GhostManager
+from scripts.scenes.tutorial_scene import TutorialScene
+from scripts.scenes.end_scene import EndScene
 
 
 AudioDrag = tuple[str, str, pygame.Rect]
@@ -62,6 +65,7 @@ class Game:
         self.heart_rate: HeartRateSystem = HeartRateSystem()
         self.dialogue_manager: DialogueManager = DialogueManager(self)
         self.thought_manager: ThoughtManager = ThoughtManager()
+        self.ghost_manager: GhostManager = GhostManager(self)
         self.cutscene: CutsceneEngine = CutsceneEngine(self)
         self.live: LiveReloader = LiveReloader()
 
@@ -93,13 +97,16 @@ class Game:
 
         self.scroll: int = 0
         self.breathe_pressed: bool = False
+        self._heartbeat_target_volume: float = 0.20
 
         """ scene objects """
         self.intro_scene_obj: IntroScene = IntroScene(self)
+        self.tutorial_scene_obj: TutorialScene = TutorialScene(self)
         self.first_scene_obj: FirstScene = FirstScene(self)
         self.route_choice_scene_obj: RouteChoiceScene = RouteChoiceScene(self)
         self.quiet_route_scene_obj: QuietRouteScene = QuietRouteScene(self)
         self.busy_route_scene_obj: BusyRouteScene = BusyRouteScene(self)
+        self.end_scene_obj: EndScene = EndScene(self)
 
         """ heartbeat icon """
         self.heart_icon, *_ = load_image(self.asset_paths["heart_icon"])
@@ -183,6 +190,7 @@ class Game:
         self.main_menu()
 
     def main_menu(self) -> None:
+        self.sfx.stop_all_gameplay_audio()
         while True:
             pygame.mouse.set_visible(True)
             self.render_start_menu()
@@ -211,8 +219,12 @@ class Game:
 
     def start_game_from_menu(self) -> str | None:
         self.fade_to_black(duration=1200)
+
         result: str | None = self.intro_scene_obj.run()
+        if result == "continue": result = self.tutorial_scene_obj.run()
         if result == "continue": result = self.first_scene_obj.run()
+        if result == "end": result = self.end_scene_obj.run()
+
         if result == "route_choice": result = self.route_choice_scene_obj.run()
         if result == "quiet_route": result = self.quiet_route_scene_obj.run()
         elif result == "busy_route": result = self.busy_route_scene_obj.run()
@@ -223,17 +235,22 @@ class Game:
 
     def pause_menu(self) -> str:
         paused_frame: pygame.Surface = self.display.copy()
+        self.sfx.stop_all_gameplay_audio()
         while True:
             pygame.mouse.set_visible(True)
             self.render_pause_menu(paused_frame)
             result: str | None = self.render_text_buttons(self.pause_menu_text_buttons)
-            if result == "resume": return "resume"
+            if result == "resume":
+                self.sfx.resume_gameplay_audio()
+                return "resume"
             if result == "audio": self.audio_menu(return_to="pause")
-            if result == "quit": return "menu"
+            if result == "quit":
+                return "menu"
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT: self.quit_game()
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    self.sfx.resume_gameplay_audio()
                     return "resume"
 
             self.scale_display_to_screen()
@@ -331,7 +348,10 @@ class Game:
 
             is_observed: bool = self.is_player_observed()
             self.heart_rate.update(dt=dt, is_observed=is_observed, breathe_pressed=self.breathe_pressed)
-            self.sfx.play_heartbeat(self.heart_rate.bpm)
+            # Keep heartbeat BPM and volume in sync with the heart_rate system every frame
+            current_bpm = self.heart_rate.bpm
+            self.sfx.set_heartbeat_bpm(current_bpm, volume=self._bpm_to_volume(current_bpm))
+            self.sfx.play_heartbeat(current_bpm)
 
             self.effects.render_glitch()
             self.render_floor()
@@ -368,12 +388,6 @@ class Game:
 
     def handle_input(self, dt: float) -> str | None:
         key = pygame.key.get_pressed()
-        was_breathing: bool = self.breathe_pressed
-        self.breathe_pressed = key[pygame.K_b]
-
-        if was_breathing and not self.breathe_pressed and self.heart_rate.coping_worked:
-            self.fade_ghosts()
-
         self.player_movement = [0, 0]
         if not self.breathe_pressed:
             if key[pygame.K_a]:
@@ -389,6 +403,9 @@ class Game:
                 self.quit_game()
 
             if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_b:
+                    self.heart_rate.tap_grounding()
+                    continue
                 if self.handle_dev_shortcuts(event.key):
                     continue
                 result: str | None = self.handle_keydown(event)
@@ -618,25 +635,47 @@ class Game:
 
 
     def render_breathing_prompt(self) -> None:
-        text: str = self.heart_rate.coping_state_text() if hasattr(self.heart_rate, "coping_state_text") else ""
-        if not text:
-            return
+        self.render_grounding_prompt()
 
-        if self.heart_rate.get_state() == "psychosis":
-            color = (255, 40, 40)
-        elif self.breathe_pressed:
-            color = (210, 235, 255)
-        else:
-            color = (255, 220, 180)
+    def render_grounding_prompt(self) -> None:
+        if not self.heart_rate.should_show_grounding(): return
+        progress = max(0.0, min(1.0, self.heart_rate.grounding_progress / 100.0))
+        lines = self.heart_rate.coping_state_text().split("\n")
+        y = 82
+        line_surfs = []
+        for line in lines:
+            color = (255, 55, 55) if self.heart_rate.get_state() == "psychosis" else (255, 220, 180)
+            line_surfs.append(self.heart_ui_font.render(line, True, color))
 
-        text_surf: pygame.Surface = self.heart_ui_font.render(text, True, color)
-        x: int = self.internal_w // 2 - text_surf.get_width() // 2
-        y: int = 82
-        box: pygame.Surface = pygame.Surface((text_surf.get_width() + 20, text_surf.get_height() + 10), pygame.SRCALPHA)
-        box.fill((0, 0, 0, 170))
-        self.display.blit(box, (x - 10, y - 5))
-        self.display.blit(text_surf, (x, y))
+        box_w = max(surf.get_width() for surf in line_surfs) + 34
+        box_h = len(line_surfs) * 24 + 62
+        box_x = self.internal_w // 2 - box_w // 2
+        box_y = y - 8
 
+        box = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+        box.fill((0, 0, 0, 175))
+        self.display.blit(box, (box_x, box_y))
+
+        text_y = y
+        for surf in line_surfs:
+            self.display.blit(surf, (self.internal_w // 2 - surf.get_width() // 2, text_y))
+            text_y += 24
+
+        cx = self.internal_w // 2
+        cy = text_y + 22
+        radius = 18
+
+        pygame.draw.circle(self.display, (80, 80, 80), (cx, cy), radius, 3)
+
+        if progress > 0:
+            arc_rect = pygame.Rect(cx - radius, cy - radius, radius * 2, radius * 2)
+            start_angle = math.radians(-90)
+            end_angle = math.radians(-90 + 360 * progress)
+            pygame.draw.arc(self.display, (255, 70, 70), arc_rect, start_angle, end_angle, 4)
+
+        percent = self.heart_ui_font.render(f"{int(progress * 100)}%", True, (235, 235, 235))
+        self.display.blit(percent, (cx - percent.get_width() // 2, cy - percent.get_height() // 2))
+        
     def show_help_hints(self) -> None:
         hints: list[str] = [
             "Press A -- move left", 
@@ -840,6 +879,9 @@ class Game:
             if name in self.sfx.voices:
                 self.sfx.voices[name].set_volume(volume)
 
+        if hasattr(self.sfx, "ensure_core_sfx_audible"):
+            self.sfx.ensure_core_sfx_audible()
+
     def save_audio_settings(self) -> None:
         data: dict[str, dict[str, float]] = {
             "sfx": {name: sound.get_volume() for name, sound in self.sfx.sounds.items()},
@@ -1016,20 +1058,19 @@ class Game:
         pygame.display.set_caption(self.game_name)
         return pygame.display.set_mode((self.screen_w, self.screen_h))
 
-
-    def start_heartbeat(self, bpm: float = 70, volume: float | None = None) -> None:
+    def start_heartbeat(self, bpm: float = 80) -> None:
         self.heart_rate.force_bpm(bpm)
-        if volume is None:
-            self.sfx.start_heartbeat(bpm=bpm)
-        else:
-            self.sfx.start_heartbeat(bpm=bpm, volume=volume)
+        self.sfx.start_heartbeat(bpm=bpm)
 
-    def set_heartbeat_bpm(self, bpm: float, volume: float | None = None) -> None:
-        self.heart_rate.force_bpm(bpm)
-        if volume is None:
-            self.sfx.set_heartbeat_bpm(bpm)
-        else:
-            self.sfx.set_heartbeat_bpm(bpm, volume=volume)
+    def set_heartbeat_bpm(self, bpm: float, ramp_rate: float = 8.0) -> None:
+        self.heart_rate.set_target_bpm(bpm, ramp_rate=ramp_rate)
+
+    def _bpm_to_volume(self, bpm: float) -> float:
+            resting = self.heart_rate.resting_bpm
+            maximum = self.heart_rate.max_bpm
+            ratio = max(0.0, min(1.0, (bpm - resting) / (maximum - resting)))
+
+            return 0.45 + ratio * 0.55
 
     def get_ticks(self) -> int:
         return pygame.time.get_ticks()
@@ -1073,6 +1114,7 @@ class Game:
         if hasattr(self.thought_manager, "clear"): self.thought_manager.clear()
         self.cutscene.stop()
         if hasattr(self, "ghosts"): self.ghosts.clear()
+        if hasattr(self, "ghost_manager"): self.ghost_manager.clear()
 
     def handle_dev_keys(self, event) -> bool:
         if not self.dev_mode: return False
@@ -1106,7 +1148,6 @@ class Game:
         elif phase_name == "choice_maker":
             self.route_choice_scene_obj.reset()
          
-
 
     """ other """
     def quit_game(self) -> None:

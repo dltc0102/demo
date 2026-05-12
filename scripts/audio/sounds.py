@@ -5,7 +5,7 @@ from pathlib import Path
 class SoundEffects:
     def __init__(self):
         pygame.mixer.init()
-        pygame.mixer.set_num_channels(10)
+        pygame.mixer.set_num_channels(16)
 
         self.sounds = self.load_mp3_folder("assets/sounds")
         self.voices = self.load_mp3_folder("assets/voices")
@@ -66,10 +66,12 @@ class SoundEffects:
         self.speech_channel     = pygame.mixer.Channel(6)
         self.static_channel     = pygame.mixer.Channel(7)
         self.whisper_channel    = pygame.mixer.Channel(8)
+        self.fridge_channel     = pygame.mixer.Channel(9)
 
-        # reserve these so pygame never reassigns them to other sounds
-        self.static_channel.set_reserved(True) if hasattr(pygame.mixer.Channel, 'set_reserved') else None
-        pygame.mixer.set_reserved(9)  # reserve channels 0-8 from auto-assignment
+        # Reserve the manually-managed channels so pygame's automatic sound.play()
+        # calls do not steal them. With 16 channels total, channels 10-15 stay free
+        # for one-shot sounds such as page flips, cap sounds, and UI test sounds.
+        pygame.mixer.set_reserved(11)  # reserve channels 0-10 from auto-assignment
 
         self.last_heartbeat: int        = 0
         self.next_foot: str             = "left"
@@ -115,30 +117,49 @@ class SoundEffects:
     def get_game_ticks(self):
         return pygame.time.get_ticks()
     
-    def start_heartbeat(self, bpm=70, volume=0.35):
+    def start_heartbeat(self, bpm=80):
+        if not self.heartbeat_sound:
+            print("[MISSING SOUND] assets/sounds/heartbeat_single.mp3")
+            return
+
         self.heartbeat_active = True
-        self.heartbeat_bpm = bpm
-        if self.heartbeat_sound: self.heartbeat_sound.set_volume(volume)
+        self.heartbeat_bpm = max(1, float(bpm))
+
+        self.heartbeat_sound.set_volume(1)
+        self.heartbeat_channel.set_volume(1)
+
+        interval = max(280, int(60000 / self.heartbeat_bpm))
+        self.last_heartbeat = pygame.time.get_ticks() - interval
+        self.play_heartbeat(self.heartbeat_bpm)
 
     def stop_heartbeat(self):
         self.heartbeat_active = False
         self.heartbeat_channel.stop()
 
-    def set_heartbeat_bpm(self, bpm, volume=None):
-        self.heartbeat_bpm = bpm
-        if volume is not None and self.heartbeat_sound: self.heartbeat_sound.set_volume(volume)
+    def set_heartbeat_bpm(self, bpm: float) -> None:
+        if not self.heartbeat_sound:
+            print("[MISSING SOUND] assets/sounds/heartbeat_single.mp3")
+            return
+
+        self.heartbeat_active = True
+        self.heartbeat_bpm = max(1, float(bpm))
+        self.heartbeat_sound.set_volume(1)
+        self.heartbeat_channel.set_volume(1)
 
     def update(self):
         if getattr(self, "heartbeat_active", False):
             self.play_heartbeat(self.heartbeat_bpm)
+        self.update_ambient()
 
-    def play_heartbeat(self, bpm: float):
+    def play_heartbeat(self, bpm: float | None = None):
         if not self.heartbeat_sound: return
+        bpm = max(1, float(bpm if bpm is not None else self.heartbeat_bpm))
         now = self.get_game_ticks()
-        interval = max(280, int(60000 / bpm))
+        interval = max(240, int(60000 / bpm))
+
         if now - self.last_heartbeat >= interval:
             self.heartbeat_channel.stop()
-            self.heartbeat_channel.set_volume(0.25)
+            self.heartbeat_channel.set_volume(self.heartbeat_sound.get_volume())
             self.heartbeat_channel.play(self.heartbeat_sound)
             self.last_heartbeat = now
 
@@ -152,9 +173,15 @@ class SoundEffects:
         self.next_foot = "right" if self.next_foot == "left" else "left"
 
     def play_fridge(self, opened=True):
+        key = "fridge_door_open" if opened else "fridge_door_close"
         sound = self.fridge_door_open_sound if opened else self.fridge_door_close_sound
-        sound.set_volume(0.25)
-        sound.play()
+        if not sound:
+            print(f"[MISSING SOUND] {key}.mp3 in assets/sounds")
+            return None
+        sound.set_volume(0.65)
+        self.fridge_channel.stop()
+        self.fridge_channel.play(sound)
+        return self.fridge_channel
         
     def stop_voice(self):
         for channel in self.voice_channels:
@@ -248,6 +275,7 @@ class SoundEffects:
         if sound: sound.set_volume(volume)
 
     def start_whispers(self, volume: float = 0.3) -> None:
+        """Legacy: kept for compatibility. Prefer start_ambient()."""
         if not self.whisper_sound:
             print("[MISSING SOUND] whispers.wav / schizophrenia_voices.wav")
             return
@@ -256,6 +284,7 @@ class SoundEffects:
         self.whisper_channel.play(self.whisper_sound, loops=-1)
 
     def start_static(self, volume: float = 0.15) -> None:
+        """Legacy: kept for compatibility. Prefer start_ambient()."""
         if not self.static_sound:
             print("[MISSING SOUND] static_noise_bg.wav")
             return
@@ -268,3 +297,81 @@ class SoundEffects:
     def set_whisper_volume(self, volume: float) -> None:
         sound = self.sounds.get("whispers") or self.voices.get("schizophrenia_voices")
         if sound: sound.set_volume(volume)
+
+    def start_ambient(self, static_volume: float = 0.15) -> None:
+        """Start both ambient channels. Call once when gameplay begins."""
+        if self.static_sound:
+            self.static_sound.set_volume(static_volume)
+            self.static_channel.stop()
+            self.static_channel.play(self.static_sound, loops=-1)
+
+        self._ambient_pool: list[str] = ["whispers", "bar_sounds", "muffled_talking"]
+        self._ambient_last: str | None = None
+        self._ambient_channel: pygame.mixer.Channel = pygame.mixer.Channel(10)
+        self._ambient_next_time: int = pygame.time.get_ticks() + random.randint(8_000, 18_000)
+        self._ambient_playing: bool = False
+
+    def stop_ambient(self) -> None:
+        self.static_channel.stop()
+        if hasattr(self, "_ambient_channel"):
+            self._ambient_channel.stop()
+        if hasattr(self, "_ambient_playing"):
+            self._ambient_playing = False
+
+    def update_ambient(self) -> None:
+        if not hasattr(self, "_ambient_pool"):
+            return
+        now = pygame.time.get_ticks()
+
+        if self._ambient_playing and not self._ambient_channel.get_busy():
+            self._ambient_playing = False
+            self._ambient_next_time = now + random.randint(12_000, 28_000)
+
+        if self._ambient_playing or now < self._ambient_next_time:
+            return
+
+        candidates = [k for k in self._ambient_pool if k != self._ambient_last]
+        random.shuffle(candidates)
+        chosen_key: str | None = None
+        chosen_sound: pygame.mixer.Sound | None = None
+        for key in candidates:
+            snd = self.sounds.get(key) or self.voices.get(key)
+            if snd:
+                chosen_key = key
+                chosen_sound = snd
+                break
+
+        if not chosen_sound:
+            self._ambient_next_time = now + random.randint(15_000, 30_000)
+            return
+
+        chosen_sound.set_volume(random.uniform(0.25, 0.55))
+        self._ambient_channel.stop()
+        self._ambient_channel.play(chosen_sound, loops=0)
+        self._ambient_last = chosen_key
+        self._ambient_playing = True
+
+    def stop_all_gameplay_audio(self) -> None:
+        self.heartbeat_channel.stop()
+        self.step_channel.stop()
+        self.speech_channel.stop()
+        self.static_channel.stop()
+        self.whisper_channel.stop()
+        if hasattr(self, "fridge_channel"):
+            self.fridge_channel.stop()
+        if hasattr(self, "_ambient_channel"):
+            self._ambient_channel.stop()
+        for ch in self.voice_channels:
+            ch.stop()
+        self.heartbeat_active = False
+        if hasattr(self, "_ambient_playing"):
+            self._ambient_playing = False
+
+    def resume_gameplay_audio(self, static_volume: float = 0.15) -> None:
+        self.heartbeat_active = True
+        if self.static_sound:
+            self.static_sound.set_volume(static_volume)
+            self.static_channel.play(self.static_sound, loops=-1)
+        if hasattr(self, "_ambient_next_time"):
+            self._ambient_next_time = pygame.time.get_ticks() + random.randint(5_000, 12_000)
+            self._ambient_playing = False

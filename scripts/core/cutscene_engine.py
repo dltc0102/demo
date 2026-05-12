@@ -92,7 +92,7 @@ class CutsceneEngine:
         self.game.sfx.play_voice(sound_key)
         yield from self.wait_until_voice_finished()
     
-    def shakethink(self, text, target, stall: int = 2200, gap: int = 250):
+    def shakethink(self, text, target, stall: int = 1200, gap: int = 120):
         def runner():
             lines = text if isinstance(text, list) else [text]
 

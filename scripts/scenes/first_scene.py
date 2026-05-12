@@ -1,4 +1,4 @@
-import pygame, math, random
+import pygame, math, random, itertools
 from typing import *
 from datetime import datetime, timedelta
 
@@ -65,6 +65,8 @@ class FirstScene:
             "shake_prompt_shown"    : False,
             "shake_note_prompt_shown": False,
             "bed_sleep_done"        : False,
+            "finished_getting_milk" : False,
+            "back_to_bedroom"       : False,
         }
 
         """ doors & collision areas """
@@ -108,6 +110,67 @@ class FirstScene:
         self.loading_angle = 0
         self.milk_hold_offset = (10, 8)
         self.milk_in_hand_img = pygame.transform.scale(self.milk_img, (18, 22))
+
+        self.milk_attempt_count: int = 0
+        self.forced_milk_failures: int = 5
+        self.max_milk_attempts: int = self.forced_milk_failures + 1
+        self.mom_fail_attempt: int = 5
+        self.milk_attempt_cooldown_until: int = 0
+        self.last_milk_fail_reason: str = ""
+        self.milk_fail_shake_until: int = 0
+
+        self.milk_failures: list[dict[str, object]] = [
+            {
+                "reason": "you poured water. that's not right.",
+                "display_reason": "You poured water",
+                "sound": "wash_one_cup",
+                "voices": ["thats_water", "thats_not_milk"],
+                "thoughts": ["water", "that's not milk", "why did I do that?"],
+                "realization_lines": ["that was water", "i need to focus", "that's such a dumb.. ugh", "milk, remember, milk"],
+            },
+            {
+                "reason": "you poured juice. that's not right.",
+                "display_reason": "You poured the wrong liquid",
+                "sound": "wash_one_cup",
+                "voices": ["thats_juice_not_milk", "wrong_bottle_you_stupid", "everyone_saw_that"],
+                "thoughts": ["juice?", "wrong one", "focus"],
+                "realization_lines": ["that was juice? ah dammit", "what did i want again?", "yes. milk", "remember... milk milk milk"],
+            },
+            {
+                "reason": "you poured it away because it felt unsafe.",
+                "display_reason": "You poured it away",
+                "sound": "wash_one_cup",
+                "voices": ["i_poisoned_it", "thats_gone_bad", "pour_it_away", "poison_wonderful"],
+                "thoughts": ["poison?", "gone bad?", "pour it away", "but was it milk?"],
+                "realization_lines": ["wait wasn't that milk?", "that WAS milk?", "you told me that was POISON", "you said it had gone bad", "arghhh", "i shouldn't listen to you"],
+            },
+            {
+                "reason": "your hand slipped. the glass hit the floor.",
+                "display_reason": "The glass fell to the ground",
+                "sound": "glass_shatter",
+                "voices": ["good_job_you_dropped_it", "you_made_a_mess"],
+                "thoughts": ["too loud", "broken glass", "clean it up"],
+                "realization_lines": ["fuckin hell", "damn this", "damn you guys", "ughh, i wish i could rip my ears off", "fuck!"],
+            },
+            {
+                "reason": "you poured it away. you thought it was your mom telling you to.",
+                "display_reason": "You listened to your mom",
+                "sound": "wash_one_cup",
+                "voices": ["honey_thats_gone_bad_pour_it_away"],
+                "thoughts": ["that was mom's voice", "wasn't it?", "why did I listen?"],
+                "is_mom_fail": True,
+                "realization_lines": [
+                    "is mom working for the illuminati?",
+                    "why do i do everything she asks me to so obediently?",
+                    "i bet she's working for the government",
+                    "to spy on me",
+                    "keep me in check",
+                    "im not a villain",
+                    "im just a sufferer of schizophrenia",
+                    "there is never a moment of silence",
+                ],
+            },
+        ]
 
         """ text? """
         self.started: bool = False
@@ -174,6 +237,27 @@ class FirstScene:
         mx, my = pygame.mouse.get_pos()
         return int(mx / self.game.scale_x), int(my / self.game.scale_y)
     
+    def clamp_player_to_scene_bounds(self) -> None:
+        if self.transitioning: return
+        player_w = self.game.player_w
+
+        if not self.in_kitchen:
+            min_x = 0
+            max_x = self.game.internal_w - player_w
+            self.game.player.pos[0] = max(min_x, min(self.game.player.pos[0], max_x))
+            return
+
+        if self.in_kitchen and not self.flags["is_next_day"]:
+            min_x = self.game.internal_w
+            max_x = self.game.internal_w * 2 - player_w
+            self.game.player.pos[0] = max(min_x, min(self.game.player.pos[0], max_x))
+            return
+
+        if self.flags["is_next_day"]:
+            min_x = 0
+            max_x = self.game.internal_w * 3 - player_w
+            self.game.player.pos[0] = max(min_x, min(self.game.player.pos[0], max_x))
+            
     def reset(self) -> None:
         self.in_kitchen = False
         self.scroll_x = 0
@@ -203,10 +287,8 @@ class FirstScene:
                 self.render_backgrounds("night")
             else: 
                 self.render_backgrounds("day")
-
+            self.update_ambient_ghosts(dt)
             self.render_clock()
-            if self.flags["door_unlocked"]: 
-                self.render_transition_prompt(dt)
             self.render_fridge_interaction(dt)
             self.render_get_milk_prompt(dt)
             self.render_get_milk_loading()
@@ -224,6 +306,7 @@ class FirstScene:
             self.handle_input(dt)
             if not self.transitioning:
                 self.game.player.update(self.game.player_movement, dt)
+                self.clamp_player_to_scene_bounds()
             else:
                 self.game.player_movement = [0, 0]
 
@@ -236,8 +319,16 @@ class FirstScene:
             self.game.cutscene.update()
             self.game.dialogue_manager.update()
             self.game.thought_manager.update(dt)
+            self.game.heart_rate.update(dt=dt, is_observed=False, breathe_pressed=False)
+
+            current_bpm = self.game.heart_rate.bpm
+            self.game.sfx.set_heartbeat_bpm(current_bpm)
             self.game.sfx.update()
-            self.game.render_sfx_heartbeat_ui()
+
+            self.game.heart_rate.render(self.game.display)
+            self.game.render_heart_ui()
+            self.game.render_player_status()
+            self.game.render_grounding_prompt()
 
             self.game.thought_manager.render(self.game.display, offset=(self.scroll_x, 0))
             self.game.dialogue_manager.render(self.game.display, offset=(self.scroll_x, 0))
@@ -255,16 +346,22 @@ class FirstScene:
                 self.fade_alpha = max(0, self.fade_alpha - self.fade_speed * dt)
                 self.render_fade(self.fade_alpha)
 
+            # if self.flags["sleeping"]:
+            #     self.end_fade_alpha = min(255, self.end_fade_alpha + self.end_fade_speed * dt)
+            #     self.render_fade(self.end_fade_alpha)
+
+            #     if self.end_fade_alpha >= 255 and not self.wake_up_started:
+            #         self.wake_up_started = True
+            #         self.flags["sleeping"] = False
+            #         self.end_fade_alpha = 0
+            #         self.fade_alpha = 255
+            #         self.game.cutscene.start(self.wake_up())
             if self.flags["sleeping"]:
                 self.end_fade_alpha = min(255, self.end_fade_alpha + self.end_fade_speed * dt)
                 self.render_fade(self.end_fade_alpha)
 
-                if self.end_fade_alpha >= 255 and not self.wake_up_started:
-                    self.wake_up_started = True
-                    self.flags["sleeping"] = False
-                    self.end_fade_alpha = 0
-                    self.fade_alpha = 255
-                    self.game.cutscene.start(self.wake_up())
+                if self.end_fade_alpha >= 255:
+                    return "end"
 
             self.game.scale_display_to_screen()
             pygame.display.update()
@@ -273,117 +370,152 @@ class FirstScene:
 
     """ story scripts """
     def sequence(self):
-        self.game.sfx.start_static()
-        self.game.sfx.start_whispers()
+        self.game.sfx.start_ambient()
         yield from self.script.wait(1000)
-        self.game.start_heartbeat(bpm=70, volume=1)
-        yield from self.script.say(["ugh... I can't sleep", "again"], self.game.player)
-        yield from self.script.say("I just want one quiet night.", self.game.player, interval=20)
-        yield from self.script.racethink(
-            ["was that outside?", "no, inside", "ignore it", "don't answer"],
-            self.game.player
+        self.game.start_heartbeat(bpm=80)
+        yield from itertools.chain(
+            self.script.say(["ugh... I can't sleep", "again"], self.game.player),
+            self.script.say("I just want one quiet night.", self.game.player, interval=20),
+            self.script.racethink(
+                ["was that outside?", "no, inside", "ignore it", "don't answer"],
+                self.game.player
+            ),
+            self.script.wait(1000),
+            self.script.say(
+                ["why am i still awake?", "did i hear something?", "no seriously"], 
+                self.game.player
+            ),
         )
-        yield from self.script.wait(1000)
-        yield from self.script.say(
-            ["why am i still awake?", "did i hear something?", "no seriously"], 
-            self.game.player
-        )
-        yield from self.script.wait(500)
         self.game.set_heartbeat_bpm(80)
-        yield from self.script.shakethink("why me?!", self.game.player)
-        yield from self.script.say(
-            ["who- what?", "who's laughing?", "i don't know why...", "but they keep me up at night", "why me"],
-            self.game.player
+        yield from itertools.chain(
+            self.script.wait(500),
+            self.script.shakethink("why me?!", self.game.player),
+            self.script.say(
+                ["who- what?", "who's listening?", "i don't know why...", "but they keep me up at night", "why me"],
+                self.game.player
+            ),
         )
-        self.game.set_heartbeat_bpm(70)
+        self.game.set_heartbeat_bpm(90)
         yield from self.script.cloudthink(
             ["...a bit thirsty...", "what to drink?", "maybe milk?", "or ice cold water?", "can of coke?", "no, sleep first"], 
             self.game.player, stall=2000
         )
         yield from self.script.wait(500)
         yield from self.script.play_voice("glass_of_milk")
-        yield from self.script.wait(1500)
-        self.game.set_heartbeat_bpm(80)
-        yield from self.script.say(
-            ["who- who's there?", "how can you hear what i'm thinking???"], 
-            self.game.player
-        )
-        yield from self.script.racethink("what's going on", self.game.player)
-        self.game.set_heartbeat_bpm(90, volume=0.35)
-        yield from self.script.say(
-            ["huh? I'm-", "im not", "i can't help it", "they stress me out"], 
-            self.game.player
-        )
         yield from self.script.wait(1000)
-        yield from self.script.say(
-            ["hello-?", "they don't respond to what I say", "they just talk whenever they want to", "i cant- control them"], 
-            self.game.player
+        self.game.set_heartbeat_bpm(80)
+        yield from itertools.chain(
+            self.script.say(
+                ["who- who's there?", "how can you hear what i'm thinking???"], 
+                self.game.player
+            ),
+            self.script.racethink("what's going on", self.game.player),
         )
-        self.game.set_heartbeat_bpm(70, volume=0.2)
+        self.game.set_heartbeat_bpm(90)
+        yield from itertools.chain(
+            self.script.say(
+                ["huh? I'm-", "im not", "i can't help it", "they stress me out"], 
+                self.game.player
+            ),
+            self.script.wait(1000),
+            self.script.say(
+                ["hello-?", "they don't respond to what I say", "they just talk whenever they want to", "i cant- control them"], 
+                self.game.player
+            ),
+        )
+        self.game.set_heartbeat_bpm(80)
         self.flags["door_unlocked"] = True
 
     def get_milk(self):
         if not self.in_kitchen and not self.flags['fridge_opened']: return
         yield from self.script.wait(1000)
-        self.game.set_heartbeat_bpm(70)
+        self.game.set_heartbeat_bpm(85)
         yield from self.script.play_voice("dont_touch_that")
         yield from self.script.play_voice("do_it_again")
         yield from self.script.shakethink(["one thing at a time", "i can do this"], self.game.player)
         yield from self.script.play_voice("do_it_again_hale")
         yield from self.script.play_voice("theyre_all_looking_at_you")
-        yield from self.script.play_voice("do_it_again_janelle")
         yield from self.script.shakethink(["you're the only one here", "just you"], self.game.player)
         yield from self.panicked_breathing_ramp()
         yield from self.script.cloudthink(
             ["this is milk right?", "check the label", "why am I checking again?"],
             self.game.player
-        ).overlap_with("check_again")
-        yield from self.script.play_voice("youre_like_a_turtle_with_instructions")
+        )
+        yield from self.script.play_voice("check_again")
         yield from self.script.racethink(
             ["didn't I just drink some?", "no", "maybe", "what was I doing?"],
             self.game.player
-        ).overlap_with("you_already_did_this", "nah_you_didnt")
+        )
+        yield from self.script.play_voice("you_already_did_this")
+        yield from self.script.play_voice("nah_you_didnt")
         yield from self.script.play_voice("liar_liar")
         yield from self.script.cloudthink(
             ["something's wrong", "is this safe?", "it's just milk", "then why does it feel wrong?"],
             self.game.player
-        ).overlap_with("just_trust_me")
+        )
+        yield from self.script.play_voice("just_trust_me")
         yield from self.script.play_voice("hes_opening_the_fridge_again")
-        self.game.set_heartbeat_bpm(100, volume=.3)
+        self.game.set_heartbeat_bpm(100, ramp_rate=4.0)        
         yield from self.script.shakethink(["breathe", "this feeling will pass"], self.game.player)
         yield from self.script.play_voice("dont_trust_him")
         yield from self.script.wait(500)
-        yield from self.script.play_voice("drink_it").overlap_with("why_are_you_still_drinking_it")
-        yield from self.script.play_voice("i_think_your_lamp_has_opinions").overlap_with("dont_trust_them")
+        yield from self.script.play_voice("drink_it")
+        yield from self.script.play_voice("why_are_you_still_drinking_it")
+        yield from self.script.play_voice("dont_trust_them")
         yield from self.script.play_voice("dont_answer")
         yield from self.script.wait(1000)
-        self.script.play_voice("schizophrenia_voices")
         yield from self.script.say(["i can't tell what's real and what's not", "it's driving me nuts", "i'd love to be able to silence them", "all of them", "it's not easy", "i can't just ignore them either"], self.game.player)
         yield from self.script.shakethink("it's not easy at all", self.game.player)
         yield from self.script.shakethink("it's not as simple as you think", self.game.player)
         yield from self.script.wait(1000)
-        self.game.set_heartbeat_bpm(120, volume=.4)
-        yield from self.script.play_voice("dont_touch_that").overlap_with("look_behind_you")
+        self.game.set_heartbeat_bpm(120, ramp_rate=5.0)
+        yield from self.script.play_voice("dont_touch_that")
+        yield from self.script.play_voice("look_behind_you")
         yield from self.script.shakethink("ahhh", self.game.player)
-        self.game.set_heartbeat_bpm(120, volume=.55)
+        self.game.set_heartbeat_bpm(130, ramp_rate=6.0)
         yield from self.script.play_voice("theyre_watching")
-        self.script.play_voice("what_are_you_doing")
-        yield from self.script.say(["i haven't had a good sleep since foreever", "i- i'm going back to sleep", "did I drink milk yet?", "did mom already buy the groceries?", "wait..."], self.game.player)
+        yield from self.script.play_voice("what_are_you_doing")
+        yield from self.script.say(
+            [
+                "i haven't had a good sleep since foreever",
+                "i- i'm going back to sleep",
+                "did I drink milk yet?",
+                "did mom already buy the groceries?",
+                "wait..."
+            ],
+            self.game.player
+        )
         yield from self.script.shakethink(["pills", "where are my pills?!"], self.game.player)
         self.game.sfx.play_key("pill_bottle")
-        self.script.play_voice("why_are_you_so_slow")
-        yield from self.script.cloudthink(["need sleep", "can't trust my memory", "why can't i do simple things?", "this doesn't feel real", "was that glass of milk always there?", "am i dreaming?", "normal people can do this"], self.game.player)
-        yield from self.script.play_voice("nizenmehaimeishuine")
-        self.game.set_heartbeat_bpm(110, volume=.3)
+        yield from self.script.wait(1250)
+
+        yield from self.script.play_voice("why_are_you_so_slow")
+        self.flags["show_bedroom_pulse"] = True
+        yield from self.script.cloudthink(
+            [
+                "need sleep",
+                "can't trust my memory",
+                "why can't i do simple things?",
+                "this doesn't feel real",
+                "was that glass of milk always there?",
+                "am i dreaming?",
+                "normal people can do this"
+            ],
+            self.game.player
+        )
+
+        self.game.set_heartbeat_bpm(110)
 
         if not self.flags["read_sticky_note"]:
             self.flags["force_note_glow"] = True
         else:
             self.flags["can_sleep"] = True
+        self.flags["finished_getting_milk"] = True
         return
     
     def go_to_bed(self):
         self.game.player_movement = [0, 0]
+        self.flags["back_to_bedroom"] = True if not self.in_kitchen else False
         self.flags["holding_milk"] = False
         self.flags["drank_milk"] = True
 
@@ -395,19 +527,18 @@ class FirstScene:
             self.game.sfx.play(sound)
             yield from self.script.wait(500)
 
-        self.game.set_heartbeat_bpm(90, volume=.25)
+        self.game.set_heartbeat_bpm(90)
         self.game.sfx.play_key("glass_on_table")
         yield from self.script.wait(450)
-
         self.game.sfx.play_footstep("wood")
         yield from self.script.wait(320)
         self.game.sfx.play_footstep("wood")
+        self.game.set_heartbeat_bpm(80)
         yield from self.script.wait(500)
-        self.game.set_heartbeat_bpm(80, volume=.15)
         yield from self.script.say("finally...", self.game.player)
-        self.script.play_voice("took_you_long_enough")
+        yield from self.script.play_voice("took_you_long_enough")
         yield from self.script.wait(800)
-        self.game.set_heartbeat_bpm(70, volume=.1)
+        self.game.set_heartbeat_bpm(80)
         self.flags["bed_sleep_done"] = True
         self.flags["going_to_bed"] = False
         self.end_fade_alpha = 0
@@ -417,19 +548,22 @@ class FirstScene:
 
     def wake_up(self):
         self.flags['is_next_day'] = True
-        self.game.start_heartbeat(bpm=70, volume=0.25)
+        self.game.start_heartbeat(bpm=70)
         self.game.sfx.play_key("inf_laughter")
         self.game.sfx.play_key("xswl")
         yield from self.script.wait(1000)
         yield from self.script.say(["yaaaawwwwnnn", "what's all the fuzz in the morning?", "mom? are you here-?"], self.game.player)
-        yield from self.script.play_voice("horse_in_the_backyard").overlap_with("groceries_groceries")
+        yield from self.script.play_voice("horse_in_the_backyard")
+        yield from self.script.play_voice("groceries_groceries")
         self.game.set_heartbeat_bpm(80)
-        yield from self.script.play_voice("whats_wrong_with_you")
+        yield from self.script.play_voice("whats_wrong_with_you_today")
+        yield from self.script.say(["wait- you're not my mom", "mom! are you home?", "she must have left", "she did say she was gonna be busy today", "these damn voices messing with me"], self.game.player)
         yield from self.script.play_voice("your_moms_not_here")
         yield from self.script.say(["oh- right, sticky note", "guh...", "groceries-", "people-", "stress-"], self.game.player)
         yield from self.script.cloudthink(["main street?", "what time should i leave?", "i hope i don't walk in circles", "what do i need to buy?"], self.game.player)
         yield from self.script.say(["wasn't it cereal and toilet paper rolls yesterday?", "did i see it wrongly?"], self.game.player)
-        yield from self.script.play_voice("your_mom_left_the_house_already")
+        yield from self.script.play_voice("poopy_paper_rolls")
+        yield from self.script.play_voice("government_report")
         if self.flags["read_sticky_note"]:
             self.flags["show_bedroom_pulse"] = True
             yield from self.script.say("I should check that note again before I go.", self.game.player)
@@ -449,11 +583,11 @@ class FirstScene:
         yield from self.script.play_voice("why_are_you_taking_so_long")
         self.game.player.set_outfit("back")
         yield from self.script.wait(400)
-        self.script.play_voice("undress")
+        yield from self.script.play_voice("undress")
         yield from self.script.wait(800)
-        self.script.play_voice("belt")
+        yield from self.script.play_voice("belt")
         yield from self.script.wait(600)
-        self.script.play_voice("dress")
+        yield from self.script.play_voice("dressed")
         yield from self.script.wait(900)
         self.game.player.set_outfit("outdoors")
         yield from self.script.play_voice("took_you_long_enough")
@@ -470,7 +604,6 @@ class FirstScene:
             ["main street is faster", "too many people", "quiet route is longer", "what if I get lost?", "just choose"],
             self.game.player
         )
-
         self.flags["clothes_changed"] = True
         self.flags["ready_to_go"] = True
         self.flags["show_bedroom_pulse"] = False
@@ -512,6 +645,7 @@ class FirstScene:
                 press_return: bool = event.key == pygame.K_RETURN
                 press_interact: bool = event.key == pygame.K_e
                 press_tab: bool = event.key == pygame.K_TAB
+                press_grounding: bool = event.key == pygame.K_b
 
                 if press_escape:
                     pause_result: str = self.game.pause_menu()
@@ -538,12 +672,13 @@ class FirstScene:
                         self.game.sfx.play_fridge(opened=opening)
                         self.flags["fridge_seen"] = True
                         self.flags["note_unlocked"] = True
-
                 if press_tab:
                     if self.flags["read_sticky_note"] and not self.flags["sticky_note_complete"]:
                         opening = not self.flags["sticky_note_open"]
                         self.flags["sticky_note_open"] = not self.flags["sticky_note_open"]
                         if opening: self.game.sfx.play_key("page_flip")
+                if press_grounding:
+                    self.game.heart_rate.tap_grounding()
             
             if is_mbdown:
                 if (
@@ -662,35 +797,52 @@ class FirstScene:
     
     def render_glow_prompt(self) -> None:
         if self.transitioning: return
-
         if self.flags.get("show_exit_pulse") and self.in_kitchen:
-            self.render_glowing_text("Exit house ->", (self.game.internal_w - 170, self.exit_house_trigger.centery), color=(180, 255, 190))
+            self.render_glowing_text(["Exit house", "->"], side="right", color=(180, 255, 190))
             return
 
         if self.in_kitchen:
-            self.render_glowing_text("Bedroom <-", (40, self.kitchen_to_bedroom_trigger.centery), color=(255, 245, 180))
+            if (
+                self.flags.get("show_bedroom_pulse")
+                and self.flags.get("fridge_opened")
+                and self.flags.get("read_sticky_note")
+                and self.flags.get("holding_milk")
+            ):
+                self.render_glowing_text(["Bedroom", "<-"], side="left", color=(255, 245, 180))
             return
 
         if self.flags.get("door_unlocked") or self.flags.get("show_exit_pulse") or self.flags.get("show_bedroom_pulse"):
-            self.render_glowing_text("Kitchen ->", (self.game.internal_w - 170, self.bedroom_to_kitchen_trigger.centery), color=(255, 245, 180))
+            self.render_glowing_text(["Kitchen", "->"], side="right", color=(255, 245, 180))
 
-    def render_glowing_text(self, text: str, pos: tuple[int, int], color=(255, 245, 180)) -> None:
+    def render_glowing_text(self, lines: list[str], side: str, color=(255, 245, 180)) -> None:
         pulse = (math.sin(pygame.time.get_ticks() * 0.004) + 1) / 2
-        alpha = int(90 + pulse * 120)
+        alpha = int(105 + pulse * 120)
+        font = self.game.menu_font
+        longest = max(lines, key=len)
+        text_w = font.text_width(longest)
 
-        x, y = pos
-        font = self.game.heart_ui_font
-        text_surf = font.render(text, True, color)
-        text_surf.set_alpha(alpha)
+        x = self.game.internal_w - text_w - 40 if side == "right" else 40
+        y = self.game.internal_h // 2 + 30
 
-        glow_surf = font.render(text, True, color)
-        glow_surf.set_alpha(int(alpha * 0.35))
+        for idx, line in enumerate(lines):
+            line_y = y + idx * 18
+            pos = (x, line_y)
 
-        for ox, oy in [(-2, 0), (2, 0), (0, -2), (0, 2), (-1, -1), (1, -1), (-1, 1), (1, 1)]:
-            self.game.display.blit(glow_surf, (x + ox, y + oy))
+            self.game.render_text_glow(line, font, pos, glow_radius=3, glow_alpha=int(alpha * 0.4))
 
-        self.game.display.blit(text_surf, (x, y))
-        
+            text_w = font.text_width(line)
+            text_h = self.game.get_font_height(font)
+
+            temp = pygame.Surface((text_w, text_h), pygame.SRCALPHA)
+            font.render(temp, line, (0, 0))
+
+            tint = pygame.Surface(temp.get_size(), pygame.SRCALPHA)
+            tint.fill((*color, 255))
+            temp.blit(tint, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+            temp.set_alpha(alpha)
+
+            self.game.display.blit(temp, pos)
+
     def render_sfx_heartbeat_ui(self) -> None:
         if not getattr(self.sfx, "heartbeat_active", False): return
         bpm = int(self.sfx.heartbeat_bpm)
@@ -791,7 +943,16 @@ class FirstScene:
 
     """ milk interaction """
     def update_get_milk(self, dt):
-        if self.flags["milk_taken"]: return
+        if self.flags["milk_taken"]:
+            return
+
+        now = pygame.time.get_ticks()
+        if now < self.milk_attempt_cooldown_until:
+            self.flags["getting_milk"] = False
+            self.get_milk_progress = 0
+            self.get_milk_started_sound = False
+            return
+
         holding_g = pygame.key.get_pressed()[pygame.K_g]
         can_get_milk = self.is_near_open_fridge()
 
@@ -808,8 +969,49 @@ class FirstScene:
 
         self.get_milk_progress += 1000 * dt
         self.loading_angle = (self.loading_angle + 360 * dt) % 360
+
         if self.get_milk_progress >= self.get_milk_hold_time:
+            self.resolve_get_milk_attempt()
+
+    def resolve_get_milk_attempt(self) -> None:
+        self.milk_attempt_count += 1
+
+        self.flags["getting_milk"] = False
+        self.get_milk_started_sound = False
+        self.get_milk_progress = 0
+        self.game.sfx.milk_cap(screwed_on=False)
+
+        if self.milk_attempt_count > self.forced_milk_failures:
             self.finish_getting_milk()
+            return
+
+        if self.milk_attempt_count == self.mom_fail_attempt:
+            fail_data = self.milk_failures[-1]
+        else:
+            fail_index = min(self.milk_attempt_count - 1, len(self.milk_failures) - 2)
+            fail_data = self.milk_failures[fail_index]
+
+        self.fail_getting_milk(fail_data)
+
+    def fail_getting_milk(self, fail_data: dict[str, object]) -> None:
+        self.last_milk_fail_reason = str(fail_data.get("display_reason", fail_data.get("reason", "that was not right.")))
+        self.milk_attempt_cooldown_until = pygame.time.get_ticks() + 2700
+
+        self.game.sfx.play_key("pouring_milk")
+        fail_sound_key = str(fail_data.get("sound", "wash_one_cup"))
+
+        fail_bpms = [105, 125, 145, 165, 180]
+        fail_index = min(self.milk_attempt_count - 1, len(fail_bpms) - 1)
+        fail_bpm = fail_bpms[fail_index]
+        self.game.set_heartbeat_bpm(fail_bpm, ramp_rate=10.0)
+        self.game.heart_rate.add_stress_unit(0.8 + self.milk_attempt_count * 0.45)
+
+        if fail_bpm >= 165:
+            self.game.heart_rate.coping_worked = False
+
+        self.game.sfx.set_heartbeat_bpm(fail_bpm)
+        self.milk_fail_shake_until = pygame.time.get_ticks() + 1000
+        self.game.cutscene.start(self.milk_attempt_failed_cutscene(fail_data, self.milk_attempt_count, fail_sound_key))
 
     def finish_getting_milk(self):
         self.flags["getting_milk"] = False
@@ -823,6 +1025,62 @@ class FirstScene:
         self.game.sfx.play_key("pouring_milk")
         self.game.cutscene.start(self.get_milk())
 
+    def play_sound_if_available(self, sound_key: str, volume: float | None = None) -> None:
+        if sound_key in getattr(self.game.sfx, "sounds", {}):
+            self.game.sfx.play_key(sound_key, volume)
+            return
+        print(f"[missing sound] add {sound_key!r} to SoundEffects.sounds")
+
+    def voice_or_thought(self, voice_key: str, fallback: str, volume: float | None = None):
+        if voice_key in getattr(self.game.sfx, "voices", {}):
+            yield from self.script.play_voice(voice_key, volume=volume)
+            return
+        yield from self.script.shakethink(fallback, self.game.player, stall=650)
+
+    def milk_attempt_failed_cutscene(self, fail_data: dict[str, object], attempt: int, fail_sound_key: str = ""):
+        volume = min(1.0, 0.35 + attempt * 0.14)
+        reason = str(fail_data.get("reason", "that was not right."))
+        voices = list(fail_data.get("voices", []))
+        thoughts = list(fail_data.get("thoughts", [reason]))
+        is_mom_fail = bool(fail_data.get("is_mom_fail", False))
+
+        yield from self.script.wait(1000)
+
+        if fail_sound_key:
+            self.play_sound_if_available(fail_sound_key)
+        while self.game.sfx.is_voice_playing(): yield
+
+        if is_mom_fail:
+            yield from self.voice_or_thought("honey_thats_gone_bad_pour_it_away", "pour it away", volume=volume)
+            yield from self.script.wait(800)
+            for line in list(fail_data.get("realization_lines", [])):
+                yield from self.script.say(line, self.game.player, stall=1100, interval=22)
+            yield from self.script.cloudthink(
+                ["one more try", "it's just milk", "you can do this"],
+                self.game.player, stall=900
+            )
+            return
+
+        yield from self.script.shakethink(reason, self.game.player, stall=900)
+        yield from self.script.racethink(thoughts, self.game.player, stall=700, gap=65)
+
+        for idx, voice_key in enumerate(voices[:3]):
+            fallback = thoughts[min(idx, len(thoughts) - 1)] if thoughts else reason
+            yield from self.voice_or_thought(str(voice_key), str(fallback), volume=volume)
+
+        realization_lines = fail_data.get("realization_lines")
+        if realization_lines:
+            yield from self.script.say(list(realization_lines), self.game.player, stall=900)
+
+        if attempt < self.max_milk_attempts:
+            yield from self.script.cloudthink(
+                ["try again", "hold the glass steady", "listen to yourself"],
+                self.game.player,
+                stall=850
+            )
+        else:
+            yield from self.script.cloudthink(["just get the milk", "please"], self.game.player, stall=850)
+
     def render_get_milk_prompt(self, dt):
         if self.flags["milk_taken"]: return
         target_alpha = 255 if self.is_near_open_fridge() else 0
@@ -834,13 +1092,59 @@ class FirstScene:
 
         if self.get_milk_prompt_alpha <= 0: return
 
-        text = self.game.heart_ui_font.render("Hold [G] to get milk", True, (255, 255, 255))
-        text.set_alpha(int(self.get_milk_prompt_alpha * 0.9))
+        next_attempt = min(self.milk_attempt_count + 1, self.max_milk_attempts)
+        prompt = "Hold [G] to get milk"
+        if self.milk_attempt_count > 0:
+            prompt = "Hold [G] to try again"
+        if next_attempt >= self.max_milk_attempts:
+            prompt = "Hold [G] to get milk"
 
-        x, y = self.polygon_center(self.world_points([(560, 136), (636, 128), (637, 444), (560, 412)], self.kitchen_x))
-        self.game.display.blit(text, (x - text.get_width() // 2, y + 35))
+        fridge_pts = self.world_points([
+            (560, 136), (718, 129), (718, 432), (636, 444), (560, 412)
+        ], self.kitchen_x)
+        cx, cy = self.polygon_center(fridge_pts)
+
+        font = self.game.menu_font
+        p_w = font.text_width(prompt)
+        p_h = self.game.get_font_height(font) + 4
+        line_gap = 4
+        has_reason = bool(self.last_milk_fail_reason and self.milk_attempt_count > 0)
+
+        if has_reason:
+            r_text = self.last_milk_fail_reason
+            r_w = font.text_width(r_text)
+            total_h = p_h + line_gap + p_h
+            top_y = cy - total_h // 2
+
+            p_surf = pygame.Surface((max(1, p_w), p_h), pygame.SRCALPHA)
+            font.render(p_surf, prompt, (0, 0))
+            p_surf.set_alpha(int(self.get_milk_prompt_alpha * 0.9))
+            self.game.display.blit(p_surf, (cx - p_w // 2, top_y))
+
+            r_surf = pygame.Surface((max(1, r_w), p_h), pygame.SRCALPHA)
+            font.render(r_surf, r_text, (0, 0))
+            r_surf.set_alpha(int(self.get_milk_prompt_alpha * 0.82))
+            self.game.display.blit(r_surf, (cx - r_w // 2, top_y + p_h + line_gap))
+        else:
+            p_surf = pygame.Surface((max(1, p_w), p_h), pygame.SRCALPHA)
+            font.render(p_surf, prompt, (0, 0))
+            p_surf.set_alpha(int(self.get_milk_prompt_alpha * 0.9))
+            self.game.display.blit(p_surf, (cx - p_w // 2, cy - p_h // 2))
 
     def render_get_milk_loading(self):
+        now = pygame.time.get_ticks()
+        is_failing = now < self.milk_fail_shake_until
+
+        if is_failing:
+            rect = self.game.player.rect()
+            cx = rect.centerx - self.scroll_x + random.randint(-3, 3)
+            cy = rect.top - 34 + random.randint(-2, 2)
+            radius = 13
+            pygame.draw.circle(self.game.display, (120, 20, 20), (cx, cy), radius, 2)
+            arc_rect = pygame.Rect(cx - radius, cy - radius, radius * 2, radius * 2)
+            pygame.draw.arc(self.game.display, (255, 60, 60), arc_rect, math.radians(-90), math.radians(270), 3)
+            return
+
         if not self.flags["getting_milk"]: return
         progress = max(0, min(1, self.get_milk_progress / self.get_milk_hold_time))
         rect = self.game.player.rect()
@@ -881,12 +1185,20 @@ class FirstScene:
         note_quad = self.get_note_quad()
         screen_quad = [(x - self.scroll_x, y) for x, y in note_quad]
         mx, my = self.get_mouse_pos()
-        if not self.flags["force_note_glow"] and not self.is_point_in_polygon((mx, my), screen_quad): return
-        pulse = (math.sin(pygame.time.get_ticks() * 0.006) + 1) / 2
-        alpha = 45 + int(pulse * 30)
-        pygame.draw.polygon(self.glow, (255, 245, 180, alpha), screen_quad)
-        pygame.draw.polygon(self.glow, (255, 255, 255, 170), screen_quad, width=1)
-        self.game.display.blit(self.glow, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
+        hovered = self.is_point_in_polygon((mx, my), screen_quad)
+
+        if self.flags["force_note_glow"]:
+            pulse = (math.sin(pygame.time.get_ticks() * 0.008) + 1) / 2
+            alpha = int(60 + pulse * 120)
+            pygame.draw.polygon(self.glow, (255, 245, 80, alpha), screen_quad)
+            pygame.draw.polygon(self.glow, (255, 255, 100, int(100 + pulse * 155)), screen_quad, width=2)
+            self.game.display.blit(self.glow, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
+        elif hovered:
+            pulse = (math.sin(pygame.time.get_ticks() * 0.006) + 1) / 2
+            alpha = 45 + int(pulse * 30)
+            pygame.draw.polygon(self.glow, (255, 245, 180, alpha), screen_quad)
+            pygame.draw.polygon(self.glow, (255, 255, 255, 170), screen_quad, width=1)
+            self.game.display.blit(self.glow, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
 
     def render_open_sticky_note(self) -> None:
         if not self.flags["sticky_note_open"]:
@@ -1067,13 +1379,28 @@ class FirstScene:
 
     """ audio helpers """
     def panicked_breathing_ramp(self):
-        self.game.sfx.play_key("male_panicked_breathing", volume=0.65)
-        self.game.set_heartbeat_bpm(90, volume=.3)
+        self.game.sfx.play_key("male_panicked_breathing")
+        self.game.set_heartbeat_bpm(90)
         yield from self.script.wait(700)
-        self.game.set_heartbeat_bpm(100, volume=.35)
+        self.game.set_heartbeat_bpm(100, ramp_rate=4.0)
         yield from self.script.wait(700)
-        self.game.set_heartbeat_bpm(110, volume=.45)
+        self.game.set_heartbeat_bpm(110)
         yield from self.script.wait(700)
-        self.game.set_heartbeat_bpm(120, volume=.55)
+        self.game.set_heartbeat_bpm(120, ramp_rate=7.0)
         yield from self.script.wait(900)
         
+    """ hallucinations """
+    def update_ambient_ghosts(self, dt: float) -> None:
+        active = (
+            self.flags["door_unlocked"]
+            and not self.transitioning
+            and not self.flags["sticky_note_open"]
+            and not self.flags["sleeping"]
+        )
+        room_left = self.game.internal_w if self.in_kitchen else 0
+        room_right = room_left + self.game.internal_w
+        fridge_rect = self.fridge_rect if self.in_kitchen else None
+
+        room_name = "kitchen" if self.in_kitchen else "bedroom"
+        self.game.ghost_manager.update(dt, room_left=room_left, room_right=room_right, fridge_rect=fridge_rect, active=active, room_name=room_name)
+        self.game.ghost_manager.render(self.game.display, offset=(self.scroll_x, 0))

@@ -2,7 +2,7 @@ import pygame, math, random
 from scripts.ui.font import Font
 
 class DialogueObject:
-    def __init__(self, game, text, target, stall=1500, interval: int = 28):
+    def __init__(self, game, text, target, stall=1500, interval: int = 28, speech_sfx: bool = True):
         self.game = game
         self.lines: list[str] = text if isinstance(text, list) else [text]
         self.target = target
@@ -23,6 +23,7 @@ class DialogueObject:
         self.current_alpha = 0
         self.line_finished_time = None
         self.pause_until = 0
+        self.speech_sfx = speech_sfx
 
     def current_text(self): return self.lines[self.idx]
 
@@ -104,7 +105,7 @@ class DialogueObject:
             char = text[char_index]
             self.visible_chars += 1
             self.char_timer -= self.char_delay
-            if not char.isspace():
+            if self.speech_sfx and not char.isspace():
                 self.game.sfx.play_speech_blip()
 
             if char in (".", ",", "?", "!", "-"):
@@ -171,8 +172,8 @@ class DialogueManager:
         self.game = game
         self.dialogues = []
 
-    def dialogue_object(self, text, target, stall=1500, interval: int = 28):
-        dialogue = DialogueObject(self.game, text, target, stall, interval)
+    def dialogue_object(self, text, target, stall=1500, interval: int = 28, speech_sfx: bool = True):
+        dialogue = DialogueObject(self.game, text, target, stall, interval, speech_sfx)
         self.dialogues.append(dialogue)
         return dialogue
 

@@ -246,7 +246,7 @@ class RaceThought(BaseThought):
         surface.blit(text_surf, (int(x), int(y)))
 
 class ShakeThought:
-    def __init__(self, text: str, target, stall: int = 2200) -> None:
+    def __init__(self, text: str, target, stall: int = 1200) -> None:
         self.text = str(text)
         self.target = target
         self.font_white = Font("assets/fonts/large_font_white.png", scale=1)
