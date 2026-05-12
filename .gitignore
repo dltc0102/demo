@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+build/
+dist/
+*.spec
+.DS_Store
+.vscode/
+.idea/
+/unused_assets/*
+level_editor.py

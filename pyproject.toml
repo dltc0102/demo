@@ -1,0 +1,31 @@
+[project]
+name = "dltc-peace-and-quiet"
+version = "0.1.0"
+description = "A 2D narrative game that simulates what a person suffering/living with schizophrenia feels like. Made with pygame-ce."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "biscuit" }]
+dependencies = [
+    "pygame-ce",
+    "numpy",
+]
+
+[project.scripts]
+demo-game = "demo_game.game:main"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["demo_game*"]
+
+[tool.setuptools.package-data]
+demo_game = [
+    "assets/**/*",
+    "audio_config.json",
+    "credits.json",
+    "credits_detailed.json",
+    "changelog.md",
+]
