@@ -1,8 +1,7 @@
 import pygame, random
 import numpy as np
 from pathlib import Path
-from demo_game.paths import asset
-
+from paths import asset
 
 class SoundEffects:
     def __init__(self):
@@ -155,11 +154,12 @@ class SoundEffects:
         if self.bpm_boost_target is None: return
         bpm = float(getattr(self.bpm_boost_target, "bpm", 80.0))
         ratio = max(0.0, min(1.0, (bpm - 80.0) / 100.0))
-        static_vol = 0.10 + ratio * 0.45
+        fade = self._ambient_fade_factor() if hasattr(self, "_ambient_fade_start") else 1.0
+        static_vol = (0.10 + ratio * 0.45) * fade
         if self.static_sound:
             self.static_sound.set_volume(static_vol)
         if hasattr(self, "_ambient_channel") and self._ambient_playing:
-            self._ambient_channel.set_volume(0.25 + ratio * 0.40)
+            self._ambient_channel.set_volume((0.25 + ratio * 0.40) * fade)
 
     def play_heartbeat(self, bpm: float | None = None):
         if not self.heartbeat_sound: return
@@ -316,17 +316,27 @@ class SoundEffects:
         sound = self.sounds.get("whispers") or self.voices.get("schizophrenia_voices")
         if sound: sound.set_volume(volume)
 
-    def start_ambient(self, static_volume: float = 0.15) -> None:
+    def start_ambient(self, static_volume: float = 0.15, fade_in_ms: int = 3000) -> None:
         if self.static_sound:
-            self.static_sound.set_volume(static_volume)
+            self.static_sound.set_volume(0.0)
             self.static_channel.stop()
             self.static_channel.play(self.static_sound, loops=-1)
+
+        self._static_base_volume: float = static_volume
+        self._ambient_fade_start: int = pygame.time.get_ticks()
+        self._ambient_fade_duration: int = max(1, int(fade_in_ms))
 
         self._ambient_pool: list[str] = ["whispers", "bar_sounds", "muffled_talking"]
         self._ambient_last: str | None = None
         self._ambient_channel: pygame.mixer.Channel = pygame.mixer.Channel(10)
-        self._ambient_next_time: int = pygame.time.get_ticks() + random.randint(8_000, 18_000)
+        self._ambient_next_time: int = pygame.time.get_ticks() + fade_in_ms + random.randint(8_000, 18_000)
         self._ambient_playing: bool = False
+
+    def _ambient_fade_factor(self) -> float:
+        start = getattr(self, "_ambient_fade_start", None)
+        if start is None: return 1.0
+        elapsed = pygame.time.get_ticks() - start
+        return max(0.0, min(1.0, elapsed / self._ambient_fade_duration))
 
     def stop_ambient(self) -> None:
         self.static_channel.stop()
@@ -338,6 +348,11 @@ class SoundEffects:
     def update_ambient(self) -> None:
         if not hasattr(self, "_ambient_pool"): return
         now = pygame.time.get_ticks()
+        if self.bpm_boost_target is None and self.static_sound is not None:
+            fade = self._ambient_fade_factor()
+            base = getattr(self, "_static_base_volume", 0.15)
+            self.static_sound.set_volume(base * fade)
+
         if self._ambient_playing and not self._ambient_channel.get_busy():
             self._ambient_playing = False
             self._ambient_next_time = now + random.randint(12_000, 28_000)
@@ -370,15 +385,11 @@ class SoundEffects:
         self.speech_channel.stop()
         self.static_channel.stop()
         self.whisper_channel.stop()
-        if hasattr(self, "fridge_channel"):
-            self.fridge_channel.stop()
-        if hasattr(self, "_ambient_channel"):
-            self._ambient_channel.stop()
-        for ch in self.voice_channels:
-            ch.stop()
+        if hasattr(self, "fridge_channel"): self.fridge_channel.stop()
+        if hasattr(self, "_ambient_channel"): self._ambient_channel.stop()
+        for ch in self.voice_channels: ch.stop()
         self.heartbeat_active = False
-        if hasattr(self, "_ambient_playing"):
-            self._ambient_playing = False
+        if hasattr(self, "_ambient_playing"): self._ambient_playing = False
 
     def resume_gameplay_audio(self, static_volume: float = 0.15) -> None:
         self.heartbeat_active = True

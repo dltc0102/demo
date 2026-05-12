@@ -13,19 +13,15 @@ class HeartRateSystem:
         self.observed_gain = 7
         self.normal_recovery = 3
         self.breath_recovery = 18
-
         self.breath_timer = 0
         self.breath_required_time = 0.8
 
         self.is_grounding = False
         self.pulse_timer = 0
-
         self.stress_units = 0
         self.max_stress_units = 20
-
         self.stress_unit_min_gain = 0.2
         self.stress_unit_max_gain = 1.0
-
         self.panic_active = False
         self.panic_timer = 0
         self.panic_duration = 0
@@ -34,20 +30,15 @@ class HeartRateSystem:
         """ grounding tap mechanic """
         self.grounding_progress = 0.0
         self.grounding_decay = 7.0
-
-        self.grounding_normal_gain_min = 2.0
-        self.grounding_normal_gain_max = 3.0
-
-        self.grounding_overwhelmed_gain_min = 1.0
-        self.grounding_overwhelmed_gain_max = 2.0
+        self.grounding_normal_gain_min = 3.5
+        self.grounding_normal_gain_max = 5.0
+        self.grounding_overwhelmed_gain_min = 2.0
+        self.grounding_overwhelmed_gain_max = 3.5
         self.grounding_overwhelmed_chance = 0.35
-
         self.grounding_total_bpm_drop = 45.0
         self.grounding_total_stress_drop = 8.0
-
         self.grounding_flash_timer = 0.0
         self.grounding_success_timer = 0.0
-
         self.grounding_recovery_active = False
         self.grounding_recovery_target_bpm = 90.0
         self.grounding_recovery_bpm_rate = 18.0
@@ -79,6 +70,8 @@ class HeartRateSystem:
         return self.bpm >= 145 and not self.grounding_recovery_active
     
     def coping_state_text(self):
+        if self.grounding_recovery_active or self.grounding_progress >= 100:
+            return "trying to stay grounded."
         if self.should_show_grounding():
             return "Tap [B]\nHELP ME STAY GROUNDED"
         return ""
@@ -86,7 +79,7 @@ class HeartRateSystem:
     """ grounding mechanic """
     def should_show_grounding(self) -> bool:
         return (
-            self.bpm >= 100
+            self.bpm >= 145
             or self.grounding_progress > 0
             or self.grounding_success_timer > 0
             or self.grounding_recovery_active
@@ -212,7 +205,7 @@ class HeartRateSystem:
         if self.grounding_success_timer > 0:
             self.grounding_success_timer = max(0, self.grounding_success_timer - dt)
         else:
-            if self.grounding_progress > 0:
+            if self.grounding_progress > 0 and not self.grounding_recovery_active and self.grounding_progress < 100:
                 self.grounding_progress = max(0, self.grounding_progress - self.grounding_decay * dt)
 
         self.is_grounding = self.grounding_progress > 0
@@ -249,28 +242,17 @@ class HeartRateSystem:
         return "psychosis"
 
     def render(self, surf):
-        if self.bpm < 100 and self.grounding_flash_timer <= 0:
+        if self.bpm < 120 and self.grounding_flash_timer <= 0:
             return
-
         stress = self.stress_amount()
         pulse = (math.sin(self.pulse_timer) + 1) / 2
+        if self.bpm < 135: alpha = int(16 + 28 * pulse)
+        elif self.bpm < 145: alpha = int(22 + 45 * pulse)
+        elif self.bpm < 165: alpha = int(30 + 70 * pulse)
+        else: alpha = int(45 + 100 * pulse)
 
-        if self.bpm < 125:
-            alpha = int(16 + 28 * pulse)
-        elif self.bpm < 145:
-            alpha = int(22 + 45 * pulse)
-        elif self.bpm < 165:
-            alpha = int(30 + 70 * pulse)
-        else:
-            alpha = int(45 + 100 * pulse)
-
-        if self.grounding_flash_timer > 0:
-            alpha = max(alpha, 90)
-
+        if self.grounding_flash_timer > 0: alpha = max(alpha, 90)
         alpha = max(0, min(155, alpha))
-
         red_overlay = pygame.Surface(surf.get_size(), pygame.SRCALPHA)
         red_overlay.fill((255, 0, 0, alpha))
         surf.blit(red_overlay, (0, 0))
-
-    

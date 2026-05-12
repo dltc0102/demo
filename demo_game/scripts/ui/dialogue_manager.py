@@ -1,6 +1,6 @@
 import pygame, math, random
-from demo_game.scripts.ui.font import Font
-from demo_game.paths import asset
+from scripts.ui.font import Font
+from paths import asset
 
 class DialogueObject:
     def __init__(self, game, text, target, stall=1500, interval: int = 28, speech_sfx: bool = True):

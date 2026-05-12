@@ -1,7 +1,7 @@
 import pygame, random, math, re
 from pathlib import Path
-from demo_game.scripts.ui.font import Font
-from demo_game.paths import asset
+from scripts.ui.font import Font
+from paths import asset
 
 class PhysicsEntity:
     def __init__(self, game, entity_type, pos, size):

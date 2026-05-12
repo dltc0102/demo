@@ -12,3 +12,4 @@ dist/
 .idea/
 /unused_assets/*
 level_editor.py
+notes.md

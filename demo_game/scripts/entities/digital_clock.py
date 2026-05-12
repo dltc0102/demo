@@ -1,6 +1,6 @@
 import pygame
 from datetime import datetime as dt
-from demo_game.paths import asset
+from paths import asset
 
 class DigitalClock:
     def __init__(self, x, y):

@@ -2,10 +2,10 @@ import pygame, math, random, itertools
 from typing import *
 from datetime import datetime, timedelta
 
-from demo_game.scripts.core.utils import load_image
-from demo_game.scripts.ui.font import Font
-from demo_game.scripts.core.interact import InteractZone
-from demo_game.paths import asset
+from scripts.core.utils import load_image
+from scripts.ui.font import Font
+from scripts.core.interact import InteractZone
+from paths import asset
 
 class FirstScene:
     """ setup """
@@ -25,9 +25,6 @@ class FirstScene:
             'kitchen_day'       : asset('assets/backgrounds/kitchen_day.png'),
             'outside_home'      : asset('assets/backgrounds/outside_home.png'),
         }
-
-        for path in self.asset_paths.values():
-            self.game.live.watch(path)
 
         self.bedroom_night_img, *_  = load_image(self.asset_paths['bedroom_night'])
         self.kitchen_night_img, *_  = load_image(self.asset_paths['kitchen_night'])
@@ -123,6 +120,16 @@ class FirstScene:
         self.last_milk_fail_reason: str = ""
         self.milk_fail_shake_until: int = 0
 
+        self.high_bpm_action_delay_ms: int = 300
+        self.high_bpm_threshold: int = 100
+        self._pending_actions: list = []
+        self._milk_hold_ready_at: int = 0
+
+        self._ride_it_out_voice_key: str = "gonna_have_to_ride_it_out"
+        self._ride_it_out_subtitle: str = "if you can't ground yourself, you've got to ride it out."
+        self._ride_it_out_visible_until: int = 0
+        self._ride_it_out_duration_ms: int = 5500
+
         self.milk_failures: list[dict[str, object]] = [
             {
                 "reason": "you poured water. that's not right.",
@@ -208,27 +215,6 @@ class FirstScene:
         self.clock_begin_ticks = pygame.time.get_ticks()
 
     """ setup """
-    def live_reload(self):
-        changed = False
-
-        for key, path in self.asset_paths.items():
-            if self.game.live.changed(path):
-                changed = True
-                print(f"[live reload] {path}")
-
-        if not changed:
-            return
-
-        self.bedroom_night_img, *_ = load_image(self.asset_paths["bedroom_night"])
-        self.kitchen_night_img, *_ = load_image(self.asset_paths["kitchen_night"])
-        self.fridge_open_img, *_ = load_image(self.asset_paths["fridge_open"])
-        self.milk_img, *_ = load_image(self.asset_paths["milk_img"])
-        self.sticky_note_img, *_ = load_image(self.asset_paths["sticky_note_img"])
-        self.bedroom_day_img, *_ = load_image(self.asset_paths["bedroom_day"])
-        self.kitchen_day_img, *_ = load_image(self.asset_paths["kitchen_day"])
-        self.outside_home_img, *_ = load_image(self.asset_paths["outside_home"])
-        self.milk_in_hand_img = pygame.transform.scale(self.milk_img, (18, 22))
-    
     def world_points(self, points, world_x=0) -> list[tuple[int, int]]:
         return [(x + world_x, y) for x, y in points]
 
@@ -282,7 +268,6 @@ class FirstScene:
         self.reset()
         while True:
             dt = self.game.clock.get_time() / 1000
-            self.live_reload()
             elapsed = pygame.time.get_ticks() - self.start_time
 
             self.game.display.fill((0, 0, 0))
@@ -334,6 +319,7 @@ class FirstScene:
             self.game.render_heart_ui()
             self.game.render_player_status()
             self.game.render_grounding_prompt()
+            self.render_ride_it_out_subtitle()
             self.render_sanity_dots()
 
             self.game.thought_manager.render(self.game.display, offset=(self.scroll_x, 0))
@@ -618,6 +604,35 @@ class FirstScene:
         
 
     """ player input"""
+    def _is_high_bpm_delayed(self) -> bool:
+        hr = self.game.heart_rate
+        return (not hr.is_psychosis()) and hr.bpm >= self.high_bpm_threshold
+
+    def _schedule_or_run(self, fn) -> str | None:
+        if self._is_high_bpm_delayed():
+            fire_at = pygame.time.get_ticks() + self.high_bpm_action_delay_ms
+            self._pending_actions.append((fire_at, fn))
+            return None
+        return fn()
+
+    def _process_pending_actions(self) -> str | None:
+        if not self._pending_actions: return None
+        now = pygame.time.get_ticks()
+        if self.game.heart_rate.is_psychosis():
+            self._pending_actions.clear()
+            return None
+        still_pending = []
+        result = None
+        for fire_at, fn in self._pending_actions:
+            if now >= fire_at:
+                r = fn()
+                if r is not None and result is None:
+                    result = r
+            else:
+                still_pending.append((fire_at, fn))
+        self._pending_actions = still_pending
+        return result
+
     def handle_input(self, dt):
         key = pygame.key.get_pressed()
         self.game.player_movement = [0, 0]
@@ -639,8 +654,11 @@ class FirstScene:
         if moving and not self.transitioning:
             surface = "tiles" if self.in_kitchen else "wood"
             self.game.sfx.play_footstep(surface)
-    
+
     def handle_events(self) -> None:
+        deferred_result = self._process_pending_actions()
+        if deferred_result: return deferred_result
+
         for event in pygame.event.get():
             quit_type: bool = event.type == pygame.QUIT
             is_keydown: bool = event.type == pygame.KEYDOWN
@@ -649,12 +667,8 @@ class FirstScene:
             if quit_type: self.game.quit_game()
             if self.game.handle_dev_keys(event): continue
             if self.game.heart_rate.is_psychosis():
-                if is_keydown:
-                    if event.key == pygame.K_b:
-                        self.game.heart_rate.tap_grounding()
-                    elif event.key == pygame.K_ESCAPE:
-                        pause_result: str = self.game.pause_menu()
-                        if pause_result == "menu": return "menu"
+                if is_keydown and event.key == pygame.K_b:
+                    self.game.heart_rate.tap_grounding()
                 continue
 
             if is_keydown: # tap once, not holding key down
@@ -665,38 +679,19 @@ class FirstScene:
                 press_grounding: bool = event.key == pygame.K_b
 
                 if press_escape:
-                    pause_result: str = self.game.pause_menu()
-                    if pause_result == "menu": return "menu"
-                if press_return: return "continue"
+                    r = self._schedule_or_run(lambda: "menu" if self.game.pause_menu() == "menu" else None)
+                    if r: return r
+                if press_return:
+                    r = self._schedule_or_run(lambda: "continue")
+                    if r: return r
                 if press_interact:
-                    if self.closet_zone.is_visible and self.flags["is_next_day"]:
-                        self.flags["clothes_changed"] = True
-                    if self.flags["is_next_day"] and not self.flags["clothes_changed"]:
-                        if self.game.player.rect().colliderect(self.closet_rect):
-                            self.flags["clothes_changed"] = True
-                            self.flags["show_bedroom_pulse"] = False
-                            self.flags["ready_to_go"] = True
-                            self.game.cutscene.start(self.change_clothes())
-                            
-                    if self.is_near_bed() and not self.flags["going_to_bed"]:
-                        self.flags["going_to_bed"] = True
-                        self.game.cutscene.start(self.go_to_bed())
-                        return None
-                    
-                    if self.game.player.rect().colliderect(self.fridge_rect.inflate(50, 50)):
-                        opening = not self.flags["fridge_opened"]
-                        self.flags["fridge_opened"] = opening
-                        self.game.sfx.play_fridge(opened=opening)
-                        self.flags["fridge_seen"] = True
-                        self.flags["note_unlocked"] = True
+                    r = self._schedule_or_run(self._do_interact)
+                    if r: return r
                 if press_tab:
-                    if self.flags["read_sticky_note"] and not self.flags["sticky_note_complete"]:
-                        opening = not self.flags["sticky_note_open"]
-                        self.flags["sticky_note_open"] = not self.flags["sticky_note_open"]
-                        if opening: self.game.sfx.play_key("page_flip")
+                    self._schedule_or_run(self._do_toggle_sticky_note)
                 if press_grounding:
                     self.game.heart_rate.tap_grounding()
-            
+
             if is_mbdown:
                 if (
                     self.flags["ready_to_go"]
@@ -705,18 +700,18 @@ class FirstScene:
                         self.exit_house_trigger.move(-self.scroll_x, 0)
                     )
                 ):
-                    self.scene_ended = True
+                    self._schedule_or_run(self._do_exit_house)
 
             if is_mbdown and event.button == 1:
                 mx, my = self.get_mouse_pos()
 
                 if self.flags["sticky_note_open"]:
                     if self.note_close_rect and self.note_close_rect.collidepoint(mx, my):
-                        self.flags["sticky_note_open"] = False
+                        self._schedule_or_run(self._do_close_sticky_note)
                         return None
 
                     if self.note_rect and not self.note_rect.collidepoint(mx, my):
-                        self.flags["sticky_note_open"] = False
+                        self._schedule_or_run(self._do_close_sticky_note)
                         return None
 
                 if (
@@ -725,14 +720,9 @@ class FirstScene:
                     and self.flags["read_sticky_note"]
                     and not self.flags["sticky_note_complete"]
                 ):
-                    self.flags["sticky_note_open"] = True
-                    self.generate_sticky_note_lines()
-                    self.game.sfx.play_key("page_flip")
-                    if self.flags["is_next_day"] and self.flags["shake_note_prompt_shown"]:
-                        self.flags["sticky_note_open_count"] += 1
-                        self.flags["shake_note_prompt_shown"] = False
+                    self._schedule_or_run(self._do_open_sticky_note_from_icon)
                     return None
-                
+
                 note_quad = self.get_note_quad()
                 screen_quad = [
                     (x - self.scroll_x, y)
@@ -744,18 +734,69 @@ class FirstScene:
                     and clicked_sticky_note
                     and not self.flags["sticky_note_complete"]
                 ):
-                    if not self.flags["read_sticky_note"]:
-                        self.flags["read_sticky_note"] = True
-                        self.generate_sticky_note_lines()
-                        self.flags["force_note_glow"] = False
-                        self.flags["can_sleep"] = True
-
-                    elif not self.flags["sticky_note_open"]:
-                        self.generate_sticky_note_lines()
-
-                    self.flags["sticky_note_open"] = True
-                    self.game.sfx.play_key("page_flip")
+                    self._schedule_or_run(self._do_click_sticky_note_in_world)
                     return None
+
+
+    def _do_interact(self) -> str | None:
+        if self.closet_zone.is_visible and self.flags["is_next_day"]:
+            self.flags["clothes_changed"] = True
+        if self.flags["is_next_day"] and not self.flags["clothes_changed"]:
+            if self.game.player.rect().colliderect(self.closet_rect):
+                self.flags["clothes_changed"] = True
+                self.flags["show_bedroom_pulse"] = False
+                self.flags["ready_to_go"] = True
+                self.game.cutscene.start(self.change_clothes())
+
+        if self.is_near_bed() and not self.flags["going_to_bed"]:
+            self.flags["going_to_bed"] = True
+            self.game.cutscene.start(self.go_to_bed())
+            return None
+
+        if self.game.player.rect().colliderect(self.fridge_rect.inflate(50, 50)):
+            opening = not self.flags["fridge_opened"]
+            self.flags["fridge_opened"] = opening
+            self.game.sfx.play_fridge(opened=opening)
+            self.flags["fridge_seen"] = True
+            self.flags["note_unlocked"] = True
+        return None
+
+    def _do_toggle_sticky_note(self) -> None:
+        if self.flags["read_sticky_note"] and not self.flags["sticky_note_complete"]:
+            opening = not self.flags["sticky_note_open"]
+            self.flags["sticky_note_open"] = not self.flags["sticky_note_open"]
+            if opening: self.game.sfx.play_key("page_flip")
+        return None
+
+    def _do_exit_house(self) -> None:
+        self.scene_ended = True
+        return None
+
+    def _do_close_sticky_note(self) -> None:
+        self.flags["sticky_note_open"] = False
+        return None
+
+    def _do_open_sticky_note_from_icon(self) -> None:
+        self.flags["sticky_note_open"] = True
+        self.generate_sticky_note_lines()
+        self.game.sfx.play_key("page_flip")
+        if self.flags["is_next_day"] and self.flags["shake_note_prompt_shown"]:
+            self.flags["sticky_note_open_count"] += 1
+            self.flags["shake_note_prompt_shown"] = False
+        return None
+
+    def _do_click_sticky_note_in_world(self) -> None:
+        if not self.flags["read_sticky_note"]:
+            self.flags["read_sticky_note"] = True
+            self.generate_sticky_note_lines()
+            self.flags["force_note_glow"] = False
+            self.flags["can_sleep"] = True
+        elif not self.flags["sticky_note_open"]:
+            self.generate_sticky_note_lines()
+        self.flags["sticky_note_open"] = True
+        self.game.sfx.play_key("page_flip")
+        return None
+
    
 
     """ rendering """
@@ -819,12 +860,7 @@ class FirstScene:
             return
 
         if self.in_kitchen:
-            if (
-                self.flags.get("show_bedroom_pulse")
-                and self.flags.get("fridge_opened")
-                and self.flags.get("read_sticky_note")
-                and self.flags.get("holding_milk")
-            ):
+            if self.can_return_to_bedroom():
                 self.render_glowing_text(["Bedroom", "<-"], side="left", color=(255, 245, 180))
             return
 
@@ -924,6 +960,14 @@ class FirstScene:
         for idx, line in enumerate(lines):
             self.game.menu_font.render(self.game.display, line, (x, y + idx * 18))
         
+    def can_return_to_bedroom(self) -> bool:
+        return bool(
+            self.flags.get("show_bedroom_pulse")
+            and self.flags.get("fridge_opened")
+            and self.flags.get("read_sticky_note")
+            and self.flags.get("holding_milk")
+        )
+
     def update_transition(self, dt) -> None:
         if not self.flags['door_unlocked']: return
         player_rect = self.game.player.rect()
@@ -935,7 +979,11 @@ class FirstScene:
                 self.game.player_movement = [0, 0]
                 return
 
-            if self.in_kitchen and player_rect.colliderect(self.kitchen_to_bedroom_trigger):
+            if (
+                self.in_kitchen
+                and player_rect.colliderect(self.kitchen_to_bedroom_trigger)
+                and self.can_return_to_bedroom()
+            ):
                 self.transitioning = True
                 self.transition_direction = "to_bedroom"
                 self.transition_start = pygame.time.get_ticks()
@@ -999,11 +1047,19 @@ class FirstScene:
         if self.flags["milk_taken"]:
             return
 
+        if self.game.heart_rate.is_psychosis():
+            self.flags["getting_milk"] = False
+            self.get_milk_progress = max(0, self.get_milk_progress - 900 * dt)
+            self.get_milk_started_sound = False
+            self._milk_hold_ready_at = 0
+            return
+
         now = pygame.time.get_ticks()
         if now < self.milk_attempt_cooldown_until:
             self.flags["getting_milk"] = False
             self.get_milk_progress = 0
             self.get_milk_started_sound = False
+            self._milk_hold_ready_at = 0
             return
 
         holding_g = pygame.key.get_pressed()[pygame.K_g]
@@ -1013,7 +1069,18 @@ class FirstScene:
             self.flags["getting_milk"] = False
             self.get_milk_progress = max(0, self.get_milk_progress - 900 * dt)
             self.get_milk_started_sound = False
+            self._milk_hold_ready_at = 0
             return
+
+        if self._is_high_bpm_delayed():
+            if self._milk_hold_ready_at == 0:
+                self._milk_hold_ready_at = now + self.high_bpm_action_delay_ms
+            if now < self._milk_hold_ready_at:
+                self.flags["getting_milk"] = False
+                self.get_milk_started_sound = False
+                return
+        else:
+            self._milk_hold_ready_at = 0
 
         self.flags["getting_milk"] = True
         if not self.get_milk_started_sound:
@@ -1417,7 +1484,7 @@ class FirstScene:
     """ digital clock """
     def render_clock(self):
         if self.in_kitchen or self.transitioning: return
-        clock_font = pygame.font.Font("assets/fonts/Minecraftia-Regular.ttf", 10)
+        clock_font = pygame.font.Font(asset("assets/fonts/Minecraftia-Regular.ttf"), 10)
         clock_color = (57, 255, 20)
 
         if self.flags["is_next_day"]:
@@ -1457,7 +1524,42 @@ class FirstScene:
         now_psychosis = self.game.heart_rate.is_psychosis()
         if now_psychosis and not self._was_psychosis:
             self.game.player_movement = [0, 0]
+            self._trigger_ride_it_out()
         self._was_psychosis = now_psychosis
+
+    def _trigger_ride_it_out(self) -> None:
+        voice = self.game.sfx.load_voice(self._ride_it_out_voice_key)
+        if voice is not None:
+            try:
+                self.game.sfx.play_voice(self._ride_it_out_voice_key, volume=0.9)
+            except Exception:
+                pass
+        self._ride_it_out_visible_until = pygame.time.get_ticks() + self._ride_it_out_duration_ms
+
+    def render_ride_it_out_subtitle(self) -> None:
+        now = pygame.time.get_ticks()
+        if now >= self._ride_it_out_visible_until: return
+        if self.game.heart_rate.grounding_recovery_active:
+            self._ride_it_out_visible_until = 0
+            return
+
+        remaining = self._ride_it_out_visible_until - now
+        fade_in = min(1.0, (self._ride_it_out_duration_ms - remaining) / 400.0)
+        fade_out = min(1.0, remaining / 800.0)
+        alpha = int(255 * min(fade_in, fade_out))
+        if alpha <= 0: return
+
+        font = self.game.grounding_prompt_font
+        text = self._ride_it_out_subtitle
+        surf = font.render(text, True, (235, 235, 220))
+        shadow = font.render(text, True, (0, 0, 0))
+        surf.set_alpha(alpha)
+        shadow.set_alpha(alpha)
+
+        x = self.game.internal_w // 2 - surf.get_width() // 2
+        y = self.game.internal_h - 38
+        self.game.display.blit(shadow, (x + 1, y + 1))
+        self.game.display.blit(surf, (x, y))
 
     def update_ambient_ghosts(self, dt: float) -> None:
         active = (

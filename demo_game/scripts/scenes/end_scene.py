@@ -1,11 +1,11 @@
 import pygame
-from demo_game.paths import asset
+from paths import asset
+
 class EndScene:
     def __init__(self, game):
         self.game = game
         self.title_font = pygame.font.Font(asset("assets/fonts/Minecraftia-Regular.ttf"), 28)
         self.body_font = pygame.font.Font(asset("assets/fonts/Minecraftia-Regular.ttf"), 18)
-        self.button_font = pygame.font.Font(asset("assets/fonts/Minecraftia-Regular.ttf"), 20)
 
         self.lines = [
             "Congratulations.",
@@ -15,26 +15,22 @@ class EndScene:
             "For tonight, that is enough.",
         ]
 
+        gap = 24
+        button_h = self.game.get_font_height(self.game.button_font) + 12 * 2
+        bottom_y = self.game.internal_h - 62
+        center_y = bottom_y - (button_h // 2) - (gap // 2)
+        self.action_buttons = self.game.create_centered_text_buttons(
+            [
+                ("menu", "BACK TO MENU"),
+                ("quit", "QUIT"),
+            ],
+            center_y=center_y,
+            gap=gap,
+        )
+
     def get_mouse_pos(self) -> tuple[int, int]:
         mx, my = pygame.mouse.get_pos()
         return int(mx / self.game.scale_x), int(my / self.game.scale_y)
-
-    def render_text_button(self, text: str, y: int) -> pygame.Rect:
-        mx, my = self.get_mouse_pos()
-
-        text_surf = self.button_font.render(text, True, (235, 235, 235))
-        text_rect = text_surf.get_rect(center=(self.game.internal_w // 2, y))
-        button_rect = text_rect.inflate(34, 18)
-
-        hovered = button_rect.collidepoint(mx, my)
-        border_color = (255, 255, 255) if hovered else (140, 140, 140)
-        text_color = (255, 255, 255) if hovered else (220, 220, 220)
-
-        text_surf = self.button_font.render(text, True, text_color)
-        pygame.draw.rect(self.game.display, border_color, button_rect, 1)
-        self.game.display.blit(text_surf, text_rect)
-
-        return button_rect
 
     def run(self) -> str:
         pygame.mouse.set_visible(True)
@@ -46,6 +42,7 @@ class EndScene:
         while True:
             dt = self.game.clock.get_time() / 1000
             self.game.display.fill((0, 0, 0))
+            self.game.effects.destabilize_backgrounds()
 
             title = "END OF DEMO"
             title_surf = self.title_font.render(title, True, (237, 220, 147))
@@ -67,15 +64,19 @@ class EndScene:
                 )
                 y += 34
 
-            menu_rect = self.render_text_button("BACK TO MENU", self.game.internal_h - 105)
-            quit_rect = self.render_text_button("QUIT", self.game.internal_h - 62)
-
+            self.game.effects.render_cursor_magnet(radius=100, strength=1)
+            result = self.game.render_text_buttons(self.action_buttons)
             if fade_alpha > 0:
                 fade_alpha = max(0, fade_alpha - fade_speed * dt)
                 fade = pygame.Surface((self.game.internal_w, self.game.internal_h))
                 fade.fill((0, 0, 0))
                 fade.set_alpha(int(fade_alpha))
                 self.game.display.blit(fade, (0, 0))
+
+            if result == "menu":
+                return "menu"
+            if result == "quit":
+                self.game.quit_game()
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -84,15 +85,6 @@ class EndScene:
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         return "menu"
-
-                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                    mx, my = self.get_mouse_pos()
-
-                    if menu_rect.collidepoint(mx, my):
-                        return "menu"
-
-                    if quit_rect.collidepoint(mx, my):
-                        self.game.quit_game()
 
             self.game.scale_display_to_screen()
             pygame.display.update()

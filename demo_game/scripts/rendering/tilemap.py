@@ -1,5 +1,5 @@
 import json, os, pygame
-from demo_game.scripts.core.utils import load_image
+from scripts.core.utils import load_image
 
 class Tileset:
     def __init__(self, path: str, source_tile_size=128, render_tile_size=16):

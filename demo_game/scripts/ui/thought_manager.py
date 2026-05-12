@@ -1,6 +1,6 @@
 import pygame, math, random
-from demo_game.scripts.ui.font import Font
-from demo_game.paths import asset
+from scripts.ui.font import Font
+from paths import asset
 
 class BaseThought:
     def __init__(self, lines: str | list[str], target, stall: int) -> None:

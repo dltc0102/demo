@@ -1,5 +1,5 @@
 import pygame
-from demo_game.scripts.core.utils import load_image
+from scripts.core.utils import load_image
 
 def clip(surf, x, y, x_size, y_size):
     handle_surf = surf.copy()

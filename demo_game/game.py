@@ -2,25 +2,25 @@ import pygame, math, random, sys, json
 from typing import Any
 from pathlib import Path
 
-from demo_game.paths import asset
-from demo_game.scripts.audio.sounds import SoundEffects
-from demo_game.scripts.core.cutscene_engine import CutsceneEngine
-from demo_game.scripts.core.utils import load_image
-from demo_game.scripts.entities.entities import Ghost, Player
-from demo_game.scripts.rendering.effects import Effects
-from demo_game.scripts.systems.heart_rate import HeartRateSystem
-from demo_game.scripts.ui.button import Button
-from demo_game.scripts.ui.dialogue_manager import DialogueManager
-from demo_game.scripts.ui.font import Font
-from demo_game.scripts.ui.thought_manager import ThoughtManager
-from demo_game.scripts.scenes.intro_scene import IntroScene
-from demo_game.scripts.scenes.first_scene import FirstScene
+from paths import asset
+from scripts.audio.sounds import SoundEffects
+from scripts.core.cutscene_engine import CutsceneEngine
+from scripts.core.utils import load_image
+from scripts.entities.entities import Ghost, Player
+from scripts.rendering.effects import Effects
+from scripts.systems.heart_rate import HeartRateSystem
+from scripts.ui.button import Button
+from scripts.ui.dialogue_manager import DialogueManager
+from scripts.ui.font import Font
+from scripts.ui.thought_manager import ThoughtManager
+from scripts.scenes.intro_scene import IntroScene
+from scripts.scenes.first_scene import FirstScene
 # from scripts.scenes.route_choice_scene import RouteChoiceScene
 # from scripts.scenes.quiet_route_scene import QuietRouteScene
 # from scripts.scenes.busy_route_scene import BusyRouteScene
-from demo_game.scripts.systems.ghost_manager import GhostManager
-from demo_game.scripts.scenes.tutorial_scene import TutorialScene
-from demo_game.scripts.scenes.end_scene import EndScene
+from scripts.systems.ghost_manager import GhostManager
+from scripts.scenes.tutorial_scene import TutorialScene
+from scripts.scenes.end_scene import EndScene
 
 
 AudioDrag = tuple[str, str, pygame.Rect]
@@ -47,12 +47,7 @@ class Game:
         self.scale_y: float = self.screen.get_height() / self.internal_h
 
         self.asset_paths: dict[str, str] = {
-            "resume_button": asset("assets/buttons/resume_button.png"),
-            "quit_button": asset("assets/buttons/quit_button.png"),
-            "start_button": asset("assets/buttons/start_button.png"),
             "pause_button": asset("assets/buttons/pause_button.png"),
-            "audio_button": asset("assets/buttons/audio_button.png"),
-            "back_button": asset("assets/buttons/back_button.png"),
             "heart_icon": asset("assets/fonts/heart_icon.png"),
             "main_menu_bg": asset("assets/backgrounds/kitchen_night_fridge_open.png"),
         }
@@ -77,6 +72,9 @@ class Game:
         self.hint_font: Font = Font(asset("assets/fonts/large_font_white.png"), scale=1)
         self.button_font: Font = Font(asset("assets/fonts/large_font_white.png"), scale=2)
         self.heart_ui_font: pygame.font.Font = pygame.font.SysFont("arial", 18)
+        self.grounding_prompt_font: pygame.font.Font = pygame.font.Font(
+            asset("assets/fonts/Minecraftia-Regular.ttf"), 14
+        )
 
         """ menu background """
         self.main_menu_bg: pygame.Surface = self.load_menu_background(self.asset_paths["main_menu_bg"])
@@ -636,42 +634,51 @@ class Game:
 
     def render_grounding_prompt(self) -> None:
         if not self.heart_rate.should_show_grounding(): return
-        progress = max(0.0, min(1.0, self.heart_rate.grounding_progress / 100.0))
-        lines = self.heart_rate.coping_state_text().split("\n")
+        text = self.heart_rate.coping_state_text()
+        if not text: return
+
+        in_recovery = self.heart_rate.grounding_recovery_active or self.heart_rate.grounding_progress >= 100
+        font = self.grounding_prompt_font
+        lines = text.split("\n")
+
+        shadow_color = (0, 0, 0)
+        if in_recovery:
+            text_color = (180, 230, 200)
+        elif self.heart_rate.get_state() == "psychosis":
+            text_color = (255, 85, 85)
+        else:
+            text_color = (255, 220, 180)
+
+        line_surfs = [font.render(line, True, text_color) for line in lines]
+        shadow_surfs = [font.render(line, True, shadow_color) for line in lines]
+
         y = 82
-        line_surfs = []
-        for line in lines:
-            color = (255, 55, 55) if self.heart_rate.get_state() == "psychosis" else (255, 220, 180)
-            line_surfs.append(self.heart_ui_font.render(line, True, color))
-
-        box_w = max(surf.get_width() for surf in line_surfs) + 34
-        box_h = len(line_surfs) * 24 + 62
-        box_x = self.internal_w // 2 - box_w // 2
-        box_y = y - 8
-
-        box = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
-        box.fill((0, 0, 0, 175))
-        self.display.blit(box, (box_x, box_y))
-
+        line_h = font.get_linesize()
         text_y = y
-        for surf in line_surfs:
-            self.display.blit(surf, (self.internal_w // 2 - surf.get_width() // 2, text_y))
-            text_y += 24
+        for surf, shadow in zip(line_surfs, shadow_surfs):
+            x = self.internal_w // 2 - surf.get_width() // 2
+            self.display.blit(shadow, (x + 1, text_y + 1))
+            self.display.blit(surf, (x, text_y))
+            text_y += line_h
 
+        if in_recovery: return
+
+        progress = max(0.0, min(1.0, self.heart_rate.grounding_progress / 100.0))
         cx = self.internal_w // 2
         cy = text_y + 22
         radius = 18
 
         pygame.draw.circle(self.display, (80, 80, 80), (cx, cy), radius, 3)
-
         if progress > 0:
             arc_rect = pygame.Rect(cx - radius, cy - radius, radius * 2, radius * 2)
             start_angle = math.radians(-90)
             end_angle = math.radians(-90 + 360 * progress)
             pygame.draw.arc(self.display, (255, 70, 70), arc_rect, start_angle, end_angle, 4)
 
-        percent = self.heart_ui_font.render(f"{int(progress * 100)}%", True, (235, 235, 235))
-        self.display.blit(percent, (cx - percent.get_width() // 2, cy - percent.get_height() // 2))
+        percent_surf = font.render(f"{int(progress * 100)}%", True, (235, 235, 235))
+        percent_shadow = font.render(f"{int(progress * 100)}%", True, shadow_color)
+        self.display.blit(percent_shadow, (cx - percent_surf.get_width() // 2 + 1, cy - percent_surf.get_height() // 2 + 1))
+        self.display.blit(percent_surf, (cx - percent_surf.get_width() // 2, cy - percent_surf.get_height() // 2))
         
     def show_help_hints(self) -> None:
         hints: list[str] = [
@@ -1014,7 +1021,9 @@ class Game:
         return int(mx / self.scale_x), int(my / self.scale_y)
 
     def handle_pause_button(self) -> str | None:
-        if not self.pause_button.render(self.display): return None
+        clicked = self.pause_button.render(self.display)
+        if self.heart_rate.is_psychosis(): return None
+        if not clicked: return None
         pause_result: str = self.pause_menu()
         if pause_result == "menu": return "menu"
         return None
@@ -1033,7 +1042,6 @@ class Game:
 
             self.render_start_menu()
             self.render_text_buttons(self.main_menu_text_buttons + [self.credits_text_button], clickable=False)
-            # self.draw_buttons_only("main")
             self.display.blit(fade, (0, 0))
 
             self.scale_display_to_screen()
