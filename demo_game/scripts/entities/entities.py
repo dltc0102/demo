@@ -1,6 +1,7 @@
 import pygame, random, math, re
 from pathlib import Path
 from demo_game.scripts.ui.font import Font
+from demo_game.paths import asset
 
 class PhysicsEntity:
     def __init__(self, game, entity_type, pos, size):
@@ -40,8 +41,8 @@ class Player(PhysicsEntity):
         self.grounded = False
 
         # animation folders
-        self.idle_dir = Path("assets/entities/player/idle")
-        self.walk_dir = Path("assets/entities/player/walk")
+        self.idle_dir = Path(asset("assets/entities/player/idle"))
+        self.walk_dir = Path(asset("assets/entities/player/walk"))
 
         self.idle_frames = self.load_frames(
             self.idle_dir, "sloopy_idle*.png", "idle"
@@ -99,9 +100,9 @@ class Player(PhysicsEntity):
         # outfit: "default" | "back" | "outdoors"
         self.outfit = outfit
         if outfit == "back":
-            self.outfit_img = self.load_outfit("assets/entities/player/sloopy_back.png")
+            self.outfit_img = self.load_outfit(asset("assets/entities/player/sloopy_back.png"))
         elif outfit == "outdoors":
-            self.outfit_img = self.load_outfit("assets/entities/player/sloopy_outdoors.png")
+            self.outfit_img = self.load_outfit(asset("assets/entities/player/sloopy_outdoors.png"))
         else:
             self.outfit_img = None
             
@@ -291,7 +292,7 @@ class NPC(PhysicsEntity):
         self.dialogue_index = 0
         self.interact_distance = 45
         self.talking = False
-        self.npc_font = Font("assets/fonts/large_font_red.png", scale=1)
+        self.npc_font = Font(asset("assets/fonts/large_font_red.png"), scale=1)
 
     def is_player_close(self, player):
         return self.rect().inflate(self.interact_distance, self.interact_distance).colliderect(player.rect())
@@ -374,8 +375,8 @@ class Ghost(PhysicsEntity):
         self.fading = False
         self.fade_speed = 3
 
-        self.ghost_font_white = Font("assets/fonts/large_font_white.png", scale=1)
-        self.ghost_font_red = Font("assets/fonts/large_font_red.png", scale=1)
+        self.ghost_font_white = Font(asset("assets/fonts/large_font_white.png"), scale=1)
+        self.ghost_font_red = Font(asset("assets/fonts/large_font_red.png"), scale=1)
         self.previous_dialogue_type = None
         self.glitch_until = 0
 
@@ -575,7 +576,7 @@ class Follower(PhysicsEntity):
         self.last_comment_time = 0
         self.comment_delay = random.randint(2200, 5200)
         self.comment_visible_time = 1600
-        self.follower_font = Font("assets/fonts/large_font_white.png", scale=1)
+        self.follower_font = Font(asset("assets/fonts/large_font_white.png"), scale=1)
 
     def is_behind_player(self, player, player_facing):
         follower_x = self.pos[0]

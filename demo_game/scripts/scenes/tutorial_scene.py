@@ -1,16 +1,16 @@
 import pygame
-
+from demo_game.paths import asset
 
 class TutorialScene:
     def __init__(self, game):
         self.game = game
 
-        self.bg = pygame.image.load("assets/backgrounds/bedroom_night.png").convert()
+        self.bg = pygame.image.load(asset("assets/backgrounds/bedroom_night.png")).convert()
         self.bg = pygame.transform.scale(self.bg, (self.game.internal_w, self.game.internal_h))
         self.bg = self.blur_surface(self.bg, blur_scale=12)
 
-        self.font = pygame.font.Font("assets/fonts/Minecraftia-Regular.ttf", 22)
-        self.button_font = pygame.font.Font("assets/fonts/Minecraftia-Regular.ttf", 24)
+        self.font = pygame.font.Font(asset("assets/fonts/Minecraftia-Regular.ttf"), 22)
+        self.button_font = pygame.font.Font(asset("assets/fonts/Minecraftia-Regular.ttf"), 24)
 
         self.lines = [
             "Use A and D keys to move around.",

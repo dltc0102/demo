@@ -1,5 +1,6 @@
 import pygame
 from datetime import datetime as dt
+from demo_game.paths import asset
 
 class DigitalClock:
     def __init__(self, x, y):
@@ -7,7 +8,7 @@ class DigitalClock:
         self.y = y
 
         self.font = pygame.font.Font(
-            "assets/fonts/digital-clock.ttf",
+            asset("assets/fonts/digital-clock.ttf"),
             48
         )
 

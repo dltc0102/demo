@@ -2,6 +2,7 @@ import pygame, math, random, sys, json
 from typing import Any
 from pathlib import Path
 
+from demo_game.paths import asset
 from demo_game.scripts.audio.sounds import SoundEffects
 from demo_game.scripts.core.cutscene_engine import CutsceneEngine
 from demo_game.scripts.core.utils import load_image
@@ -46,14 +47,14 @@ class Game:
         self.scale_y: float = self.screen.get_height() / self.internal_h
 
         self.asset_paths: dict[str, str] = {
-            "resume_button": "assets/buttons/resume_button.png",
-            "quit_button": "assets/buttons/quit_button.png",
-            "start_button": "assets/buttons/start_button.png",
-            "pause_button": "assets/buttons/pause_button.png",
-            "audio_button": "assets/buttons/audio_button.png",
-            "back_button": "assets/buttons/back_button.png",
-            "heart_icon": "assets/fonts/heart_icon.png",
-            "main_menu_bg": "assets/backgrounds/kitchen_night_fridge_open.png",
+            "resume_button": asset("assets/buttons/resume_button.png"),
+            "quit_button": asset("assets/buttons/quit_button.png"),
+            "start_button": asset("assets/buttons/start_button.png"),
+            "pause_button": asset("assets/buttons/pause_button.png"),
+            "audio_button": asset("assets/buttons/audio_button.png"),
+            "back_button": asset("assets/buttons/back_button.png"),
+            "heart_icon": asset("assets/fonts/heart_icon.png"),
+            "main_menu_bg": asset("assets/backgrounds/kitchen_night_fridge_open.png"),
         }
 
         """ declareables """
@@ -71,10 +72,10 @@ class Game:
         self.cutscene: CutsceneEngine = CutsceneEngine(self)
 
         """ fonts """
-        self.menu_font: Font = Font("assets/fonts/large_font_white.png", scale=1)
-        self.title_font: Font = Font("assets/fonts/large_font_white.png", scale=5)
-        self.hint_font: Font = Font("assets/fonts/large_font_white.png", scale=1)
-        self.button_font: Font = Font("assets/fonts/large_font_white.png", scale=2)
+        self.menu_font: Font = Font(asset("assets/fonts/large_font_white.png"), scale=1)
+        self.title_font: Font = Font(asset("assets/fonts/large_font_white.png"), scale=5)
+        self.hint_font: Font = Font(asset("assets/fonts/large_font_white.png"), scale=1)
+        self.button_font: Font = Font(asset("assets/fonts/large_font_white.png"), scale=2)
         self.heart_ui_font: pygame.font.Font = pygame.font.SysFont("arial", 18)
 
         """ menu background """
@@ -782,11 +783,8 @@ class Game:
     
     def load_unicode_font(self, size: int) -> pygame.font.Font:
         font_paths = [
-            "assets/fonts/NotoSansCJK-Regular.ttc",
-            "assets/fonts/NotoSansSC-Regular.ttf",
-            "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
-            "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
-            "/usr/share/fonts/wqy-microhei/wqy-microhei.ttc",
+            asset("assets/fonts/NotoSansCJK-Regular.ttc"),
+            asset("assets/fonts/NotoSansSC-Regular.ttf"),
         ]
 
         for path in font_paths:

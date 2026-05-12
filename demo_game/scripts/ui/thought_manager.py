@@ -1,11 +1,12 @@
 import pygame, math, random
 from demo_game.scripts.ui.font import Font
+from demo_game.paths import asset
 
 class BaseThought:
     def __init__(self, lines: str | list[str], target, stall: int) -> None:
         self.lines: list[str] = lines if isinstance(lines, list) else [lines]
         self.target = target
-        self.font: Font = Font("assets/fonts/large_font_white.png", scale=1)
+        self.font: Font = Font(asset("assets/fonts/large_font_white.png"), scale=1)
 
         self.idx: int = 0
         self.line_start: int = pygame.time.get_ticks()
@@ -249,7 +250,7 @@ class ShakeThought:
     def __init__(self, text: str, target, stall: int = 1200) -> None:
         self.text = str(text)
         self.target = target
-        self.font_white = Font("assets/fonts/large_font_white.png", scale=1)
+        self.font_white = Font(asset("assets/fonts/large_font_white.png"), scale=1)
 
         self.stall = stall
         self.start = pygame.time.get_ticks()

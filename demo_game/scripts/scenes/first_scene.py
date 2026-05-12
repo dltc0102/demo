@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from demo_game.scripts.core.utils import load_image
 from demo_game.scripts.ui.font import Font
 from demo_game.scripts.core.interact import InteractZone
+from demo_game.paths import asset
 
 class FirstScene:
     """ setup """
@@ -15,14 +16,14 @@ class FirstScene:
         self.glow = pygame.Surface((self.game.internal_w, self.game.internal_h), pygame.SRCALPHA)
 
         self.asset_paths: dict[str, str] = {
-            'bedroom_night'     : 'assets/backgrounds/bedroom_night.png',
-            'kitchen_night'     : 'assets/backgrounds/kitchen_night.png',
-            'fridge_open'       : 'assets/backgrounds/kitchen_night_fridge_open.png',
-            'milk_img'          : 'assets/entities/glass_of_milk.png',
-            'sticky_note_img'   : 'assets/entities/sticky_note.png',
-            'bedroom_day'       : 'assets/backgrounds/bedroom_day.png',
-            'kitchen_day'       : 'assets/backgrounds/kitchen_day.png',
-            'outside_home': 'assets/backgrounds/outside_home.png',
+            'bedroom_night'     : asset('assets/backgrounds/bedroom_night.png'),
+            'kitchen_night'     : asset('assets/backgrounds/kitchen_night.png'),
+            'fridge_open'       : asset('assets/backgrounds/kitchen_night_fridge_open.png'),
+            'milk_img'          : asset('assets/entities/glass_of_milk.png'),
+            'sticky_note_img'   : asset('assets/entities/sticky_note.png'),
+            'bedroom_day'       : asset('assets/backgrounds/bedroom_day.png'),
+            'kitchen_day'       : asset('assets/backgrounds/kitchen_day.png'),
+            'outside_home'      : asset('assets/backgrounds/outside_home.png'),
         }
 
         for path in self.asset_paths.values():
@@ -186,8 +187,8 @@ class FirstScene:
 
 
         """ sticky note """
-        self.sticky_note_font = pygame.font.Font("assets/fonts/Retrogression-Regular.ttf", 25)
-        self.menu_font = Font("assets/fonts/large_font_white.png", scale=1)
+        self.sticky_note_font = pygame.font.Font(asset("assets/fonts/Retrogression-Regular.ttf"), 25)
+        self.menu_font = Font(asset("assets/fonts/large_font_white.png"), scale=1)
         self.current_sticky_note_lines = None
         self.groceries_task = ["cereal", "fruits", "vegetables", "milk", "toilet rolls"]
         self.sticky_note_icon_rect = None

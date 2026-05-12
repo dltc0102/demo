@@ -1,12 +1,13 @@
 import pygame, math, random
 from demo_game.scripts.ui.font import Font
+from demo_game.paths import asset
 
 class DialogueObject:
     def __init__(self, game, text, target, stall=1500, interval: int = 28, speech_sfx: bool = True):
         self.game = game
         self.lines: list[str] = text if isinstance(text, list) else [text]
         self.target = target
-        self.font = Font("assets/fonts/large_font_white.png", scale=1)
+        self.font = Font(asset("assets/fonts/large_font_white.png"), scale=1)
         self.stall: int = stall
         self.fade = 350
         self.y_offset = 35

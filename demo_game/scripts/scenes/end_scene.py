@@ -1,11 +1,11 @@
 import pygame
-
+from demo_game.paths import asset
 class EndScene:
     def __init__(self, game):
         self.game = game
-        self.title_font = pygame.font.Font("assets/fonts/Minecraftia-Regular.ttf", 28)
-        self.body_font = pygame.font.Font("assets/fonts/Minecraftia-Regular.ttf", 18)
-        self.button_font = pygame.font.Font("assets/fonts/Minecraftia-Regular.ttf", 20)
+        self.title_font = pygame.font.Font(asset("assets/fonts/Minecraftia-Regular.ttf"), 28)
+        self.body_font = pygame.font.Font(asset("assets/fonts/Minecraftia-Regular.ttf"), 18)
+        self.button_font = pygame.font.Font(asset("assets/fonts/Minecraftia-Regular.ttf"), 20)
 
         self.lines = [
             "Congratulations.",
