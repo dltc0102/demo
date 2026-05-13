@@ -12,3 +12,7 @@ dist/
 /unused_assets/*
 level_editor.py
 notes.md
+level_editor.py*.zip
+build/
+dist/
+__pycache__/

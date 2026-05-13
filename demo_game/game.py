@@ -1335,7 +1335,7 @@ class Game:
 
     def load_credits(self) -> dict[str, list[dict[str, str]]]:
         try:
-            credits_path = Path(__file__).parent / "credits.json"
+            credits_path = asset("credits.json")
             with open(credits_path, "r", encoding="utf-8") as c:
                 return json.load(c)
         except FileNotFoundError:

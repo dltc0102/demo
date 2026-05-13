@@ -1,12 +1,15 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-
 a = Analysis(
     ['game.py'],
-    pathex=['.'],
+    pathex=[],
     binaries=[],
-    datas=[('assets', 'assets'), ('audio_config.json', '.'), ('credits.json', '.'), ('scripts/scenes/interactables.json', 'scripts/scenes')],
-    hiddenimports=['paths', 'numpy', 'numpy.core', 'numpy.core.multiarray'],
+    datas=[
+        ('assets', 'assets'),
+        ('credits.json', '.'),
+        ('scripts/scenes/interactables.json', 'scripts/scenes'),
+    ],
+    hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -14,31 +17,26 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
+
 pyz = PYZ(a.pure)
 
 exe = EXE(
     pyz,
     a.scripts,
+    a.binaries,
+    a.datas,
     [],
-    exclude_binaries=True,
     name='game',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-)
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name='game',
 )
