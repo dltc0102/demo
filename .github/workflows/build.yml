@@ -1,0 +1,34 @@
+name: Build Game
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r demo_game/requirement.txt
+
+      - name: Build with PyInstaller
+        working-directory: demo_game
+        run: |
+          pyinstaller game.spec
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: game-windows
+          path: demo_game/dist/game/
