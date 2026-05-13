@@ -2,14 +2,14 @@
 
 a = Analysis(
     ['game.py'],
-    pathex=[],
+    pathex=['.'],
     binaries=[],
     datas=[
         ('assets', 'assets'),
         ('credits.json', '.'),
         ('scripts/scenes/interactables.json', 'scripts/scenes'),
     ],
-    hiddenimports=[],
+    hiddenimports=['paths'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
