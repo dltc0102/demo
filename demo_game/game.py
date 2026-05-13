@@ -81,7 +81,9 @@ class Game:
         self.title_font: Font = Font(asset("assets/fonts/large_font_white.png"), scale=5)
         self.hint_font: Font = Font(asset("assets/fonts/large_font_white.png"), scale=1)
         self.button_font: Font = Font(asset("assets/fonts/large_font_white.png"), scale=2)
-        self.heart_ui_font: pygame.font.Font = pygame.font.SysFont("arial", 18)
+        self.heart_ui_font: pygame.font.Font = pygame.font.Font(
+            asset("assets/fonts/Minecraftia-Regular.ttf"), 18
+        )
         self.grounding_prompt_font: pygame.font.Font = pygame.font.Font(
             asset("assets/fonts/Minecraftia-Regular.ttf"), 14
         )
