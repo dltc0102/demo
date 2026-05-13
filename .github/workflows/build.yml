@@ -2,7 +2,8 @@ name: Build Game
 
 on:
   push:
-    branches: [main]
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 jobs:
@@ -19,16 +20,17 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: |
-          pip install -r demo_game/requirement.txt
+        working-directory: demo_game
+        run: pip install -r requirement.txt
 
       - name: Build with PyInstaller
         working-directory: demo_game
-        run: |
-          pyinstaller game.spec
+        run: pyinstaller game.spec
 
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+      - name: Zip build
+        run: Compress-Archive -Path demo_game/dist/game/* -DestinationPath game-windows.zip
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: game-windows
-          path: demo_game/dist/game/
+          files: game-windows.zip
