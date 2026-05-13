@@ -5,6 +5,8 @@ from datetime import datetime, timedelta
 from scripts.core.utils import load_image
 from scripts.ui.font import Font
 from scripts.core.interact import InteractZone
+from scripts.core.walkable_zone import WalkableZone
+from scripts.core.interactables_loader import load_interactables
 from paths import asset
 
 class FirstScene:
@@ -85,19 +87,6 @@ class FirstScene:
         self.kitchen_x                  = self.game.internal_w
         self.fridge_transition_alpha    = 0
         self.fridge_transition_speed    = 650
-
-        self.fridge_zone = InteractZone(
-            points=[
-                (self.kitchen_x + 560, 136),
-                (self.kitchen_x + 718, 129),
-                (self.kitchen_x + 718, 432),
-                (self.kitchen_x + 636, 444),
-                (self.kitchen_x + 560, 412),
-            ],
-            prompt="[E] to Interact",
-            font=self.game.heart_ui_font,
-            glow_surf=self.glow,
-        )
         
 
         """ milk """
@@ -114,8 +103,8 @@ class FirstScene:
         self.max_milk_attempts: int = self.forced_milk_failures + 1
         self.mom_fail_attempt: int = 5
         self._was_psychosis: bool = False
-        self._fall_anim_t: float = 0.0  # 0 = upright, 1 = fully on the floor
-        self._dot_shake_until: int = 0  # ms for sanity lifespan
+        self._fall_anim_t: float = 0.0
+        self._dot_shake_until: int = 0
         self.milk_attempt_cooldown_until: int = 0
         self.last_milk_fail_reason: str = ""
         self.milk_fail_shake_until: int = 0
@@ -204,12 +193,18 @@ class FirstScene:
 
         """ closet """
         self.closet_rect = pygame.Rect(557, 294, 147, 122)
-        self.closet_zone = InteractZone(
-            points=[(557, 294), (704, 294), (704, 416), (557, 416)],
-            prompt="Press [E] to change",
+
+        """ interactables (loaded from JSON) """
+        self.flags.setdefault("in_kitchen", False)
+        self.flags.setdefault("in_bedroom", True)
+        self.interactables, self.walkables = load_interactables(
+            asset("scripts/scenes/interactables.json"),
+            scene=self,
             font=self.game.heart_ui_font,
             glow_surf=self.glow,
         )
+        self.fridge_zone = self.interactables["kitchen_fridge"].zone
+        self.closet_zone = self.interactables["bedroom_closet"].zone
 
         """ digital clock """
         self.clock_begin_ticks = pygame.time.get_ticks()
@@ -225,6 +220,8 @@ class FirstScene:
     
     def get_mouse_pos(self) -> tuple[int, int]:
         mx, my = pygame.mouse.get_pos()
+        debug_surf = self.game.heart_ui_font.render(f"({mx}, {my})", True, (255, 255, 255))
+        self.game.display.blit(debug_surf, (50, 5))
         return int(mx / self.game.scale_x), int(my / self.game.scale_y)
     
     def clamp_player_to_scene_bounds(self) -> None:
@@ -247,6 +244,56 @@ class FirstScene:
             min_x = 0
             max_x = self.game.internal_w * 3 - player_w
             self.game.player.pos[0] = max(min_x, min(self.game.player.pos[0], max_x))
+
+    def update_room_flags(self) -> None:
+        self.flags["in_kitchen"] = bool(self.in_kitchen)
+        self.flags["in_bedroom"] = not self.in_kitchen
+
+    def update_all_interactables(self, dt: float) -> None:
+        player_rect = self.game.player.rect()
+        for entry in self.interactables.values():
+            if not entry.can_interact(self.flags):
+                entry.zone.update(dt, pygame.Rect(-10000, -10000, 1, 1), self.scroll_x)
+                continue
+            entry.zone.update(dt, player_rect, self.scroll_x)
+            entry.zone.render(self.game.display, self.scroll_x)
+
+    def get_active_walkable(self) -> "WalkableZone | None":
+        for w in self.walkables.values():
+            if w.is_active(self.flags):
+                return w
+        return None
+
+    def apply_walkable_scale(self) -> None:
+        zone = self.get_active_walkable()
+        if zone is None:
+            self.game.player.set_scale(1.0)
+            return
+        rect = self.game.player.rect()
+        feet_y = rect.bottom
+        scale = zone.scale_at_y(feet_y)
+        self.game.player.set_scale(scale)
+
+    def restrict_to_walkable(self) -> None:
+        zone = self.get_active_walkable()
+        if zone is None:
+            return
+        rect = self.game.player.rect()
+        fx = rect.centerx
+        fy = rect.bottom
+        if zone.contains(fx, fy):
+            return
+        dx, dy = self.game.player_movement
+        if dx == 0 and dy == 0:
+            return
+        steps = 6
+        for _ in range(steps):
+            self.game.player.pos[0] -= dx / steps
+            self.game.player.pos[1] -= dy / steps
+            rect = self.game.player.rect()
+            if zone.contains(rect.centerx, rect.bottom):
+                return
+        self.game.player_movement = [0, 0]
             
     def reset(self) -> None:
         self.in_kitchen = False
@@ -282,9 +329,6 @@ class FirstScene:
             self.render_get_milk_prompt(dt)
             self.render_get_milk_loading()
             self.render_bed_sleep_prompt(dt)
-            if self.flags["is_next_day"]:
-                self.closet_zone.update(dt, self.game.player.rect(), self.scroll_x)
-                self.closet_zone.render(self.game.display, self.scroll_x)
             self.render_note_interaction()
             self.render_glow_prompt()
             self.render_sticky_note_icon()
@@ -293,9 +337,13 @@ class FirstScene:
 
             self.update_get_milk(dt)
             self.handle_input(dt)
+            self.update_room_flags()
+            self.update_all_interactables(dt)
             if not self.transitioning:
                 self.game.player.update(self.game.player_movement, dt)
                 self.clamp_player_to_scene_bounds()
+                self.restrict_to_walkable()
+                self.apply_walkable_scale()
             else:
                 self.game.player_movement = [0, 0]
 
@@ -638,13 +686,19 @@ class FirstScene:
         self.game.player_movement = [0, 0]
 
         if self.game.heart_rate.is_psychosis(): return
+        speed = self.game.player_speed * self.game.player.scale
         if key[pygame.K_a]:
-            self.game.player_movement[0] -= self.game.player_speed * dt
+            self.game.player_movement[0] -= speed * dt
             self.game.player_facing = "left"
 
         if key[pygame.K_d]:
-            self.game.player_movement[0] += self.game.player_speed * dt
+            self.game.player_movement[0] += speed * dt
             self.game.player_facing = "right"
+
+        if key[pygame.K_w]:
+            self.game.player_movement[1] -= speed * dt
+        if key[pygame.K_s]:
+            self.game.player_movement[1] += speed * dt
 
         moving = self.game.player_movement[0] != 0
         if not self.flags["door_unlocked"] and not self.in_kitchen:
@@ -739,6 +793,13 @@ class FirstScene:
 
 
     def _do_interact(self) -> str | None:
+        handled_ids = {"bedroom_closet", "kitchen_fridge"}
+        for zone_id, entry in self.interactables.items():
+            if zone_id in handled_ids:
+                continue
+            if entry.zone.is_visible and entry.can_interact(self.flags):
+                entry.apply_flags(self.flags)
+
         if self.closet_zone.is_visible and self.flags["is_next_day"]:
             self.flags["clothes_changed"] = True
         if self.flags["is_next_day"] and not self.flags["clothes_changed"]:
@@ -845,12 +906,6 @@ class FirstScene:
 
     def mouse_helper(self) -> tuple[int, int]:
         mx, my = self.get_mouse_pos()
-        # coord_text = self.game.heart_ui_font.render(
-        #     f"{mx}, {my}",
-        #     True,
-        #     (255, 255, 255)
-        # )
-        # self.game.display.blit(coord_text, (50, 10))
         return mx, my         
     
     def render_glow_prompt(self) -> None:
@@ -1037,9 +1092,6 @@ class FirstScene:
       
     def render_fridge_interaction(self, dt) -> None:
         self.update_fridge_transition(dt)
-        if self.flags["fridge_seen"]: return
-        self.fridge_zone.update(dt, self.game.player.rect(), self.scroll_x)
-        self.fridge_zone.render(self.game.display, self.scroll_x)
     
 
     """ milk interaction """

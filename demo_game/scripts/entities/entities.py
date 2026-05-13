@@ -40,7 +40,6 @@ class Player(PhysicsEntity):
         self.max_fall_speed = 420
         self.grounded = False
 
-        # animation folders
         self.idle_dir = Path(asset("assets/entities/player/idle"))
         self.walk_dir = Path(asset("assets/entities/player/walk"))
 
@@ -86,6 +85,21 @@ class Player(PhysicsEntity):
             self.game.player_w = self.size[0]
             self.game.player_h = self.size[1]
 
+        self.base_size: tuple[int, int] = tuple(self.size)
+        self.scale: float = 1.0
+
+    def set_scale(self, scale: float) -> None:
+        scale = max(0.05, float(scale))
+        if abs(scale - self.scale) < 0.001: return
+        old_bottom = self.pos[1] + self.size[1]
+        new_w = max(1, int(round(self.base_size[0] * scale)))
+        new_h = max(1, int(round(self.base_size[1] * scale)))
+        self.size = (new_w, new_h)
+        self.pos[1] = old_bottom - new_h
+        self.scale = scale
+        self.game.player_w = new_w
+        self.game.player_h = new_h
+
     def load_outfit(self, path: str) -> pygame.Surface | None:
         try:
             img = pygame.image.load(path).convert()
@@ -97,7 +111,6 @@ class Player(PhysicsEntity):
             return None
 
     def set_outfit(self, outfit: str):
-        # outfit: "default" | "back" | "outdoors"
         self.outfit = outfit
         if outfit == "back":
             self.outfit_img = self.load_outfit(asset("assets/entities/player/sloopy_back.png"))
@@ -240,6 +253,9 @@ class Player(PhysicsEntity):
                 ),
             )
             return
+
+        if self.scale < 0.999:
+            image = pygame.transform.scale(image, self.size)
 
         rot = float(getattr(self, "rotation", 0.0))
         if abs(rot) > 0.01:
@@ -396,7 +412,6 @@ class Ghost(PhysicsEntity):
 
                 current_type = self.dialogue[self.dialogue_index][0]
 
-                # red dialogue becomes more likely as stress increases
                 red_chance = 0.25 + stress * 0.55
 
                 if random.random() < red_chance:
@@ -423,7 +438,6 @@ class Ghost(PhysicsEntity):
 
                 self.last_dialogue_change = now
 
-                # dialogue gets faster as stress rises
                 self.dialogue_delay = int(2200 - stress * 1200)
                 self.dialogue_delay = max(650, self.dialogue_delay)
 

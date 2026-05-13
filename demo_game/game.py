@@ -57,7 +57,17 @@ class Game:
         config_dir = Path.home() / ".daniels-demo-game"
         config_dir.mkdir(exist_ok=True)
         self.audio_settings_path: str = str(config_dir / "audio_config.json")
+
+        """ master volume + base volume state (must exist before load_audio_settings) """
+        self.master_volume: float       = 1.0
+        self.voices_master: float       = 1.0
+        self.heartbeat_master: float    = 1.0
+        self.sfx_master: float          = 1.0
+        self.base_sfx_volumes: dict[str, float]   = {}
+        self.base_voice_volumes: dict[str, float] = {}
+
         self.load_audio_settings()
+        self.apply_master_volumes()
 
         self.effects: Effects = Effects(self)
         self.heart_rate: HeartRateSystem = HeartRateSystem()
@@ -121,13 +131,13 @@ class Game:
         main_menu_center_y: int = int(self.internal_h * 0.68)
         self.menu_mouse_was_down: bool = False
         self.pause_menu_text_buttons: list[MenuTextButton] = self.create_centered_text_buttons(
-            [("resume", "RESUME"), ("audio", "AUDIO"), ("quit", "QUIT")],
+            [("resume", "RESUME"), ("options", "OPTIONS"), ("quit", "QUIT")],
             center_y=pause_menu_center_y,
             gap=24
         )
 
         self.main_menu_text_buttons: list[MenuTextButton] = self.create_centered_text_buttons(
-            [("start", "START"), ("audio", "AUDIO"), ("quit", "QUIT")],
+            [("start", "START"), ("options", "OPTIONS"), ("quit", "QUIT")],
             center_y=main_menu_center_y,
             gap=24
         )
@@ -198,7 +208,7 @@ class Game:
             if result == "start":
                 menu_result: str | None = self.start_game_from_menu()
                 if menu_result == "menu": continue
-            elif result == "audio": self.audio_menu(return_to="main")
+            elif result == "options": self.options_menu(return_to="main")
             elif result == "credits": self.credits_menu()
             elif result == "quit": self.quit_game()
             # result: str | None = self.render_buttons("main")
@@ -243,7 +253,7 @@ class Game:
             if result == "resume":
                 self.sfx.resume_gameplay_audio()
                 return "resume"
-            if result == "audio": self.audio_menu(return_to="pause")
+            if result == "options": self.options_menu(return_to="pause")
             if result == "quit":
                 return "menu"
 
@@ -299,6 +309,124 @@ class Game:
             self.scale_display_to_screen()
             pygame.display.update()
             self.clock.tick(self.fps)
+
+    def options_menu(self, return_to: str = "main") -> str:
+        back_rect = pygame.Rect(10, 10, self.button_font.text_width("BACK") + 24, self.get_font_height(self.button_font) + 16)
+        back_button: MenuTextButton = ("back", "BACK", back_rect)
+
+        while True:
+            pygame.mouse.set_visible(True)
+            self.display.fill((0, 0, 0))
+
+            title: str = "Options"
+            self.menu_font.render(self.display, title, (self.internal_w // 2 - self.menu_font.text_width(title) // 2, 20))
+
+            dev_label: str = f"DEV MODE: {'ON' if self.dev_mode else 'OFF'}"
+            buttons: list[MenuTextButton] = self.create_centered_text_buttons(
+                [("audio", "AUDIO"), ("dev", dev_label)],
+                center_y=self.internal_h // 2,
+                gap=24,
+            )
+
+            result: str | None = self.render_text_buttons([back_button] + buttons)
+
+            if result == "back":
+                self.save_audio_settings()
+                return return_to
+            if result == "audio":
+                if self.dev_mode:
+                    self.audio_menu(return_to="options")
+                else:
+                    self.simple_audio_menu(return_to="options")
+            if result == "dev":
+                self.dev_mode = not self.dev_mode
+                self.save_audio_settings()
+
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT: self.quit_game()
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    self.save_audio_settings()
+                    return return_to
+
+            self.scale_display_to_screen()
+            pygame.display.update()
+            self.clock.tick(self.fps)
+
+    def simple_audio_menu(self, return_to: str = "options") -> str:
+        back_rect = pygame.Rect(10, 10, self.button_font.text_width("BACK") + 24, self.get_font_height(self.button_font) + 16)
+        back_button: MenuTextButton = ("back", "BACK", back_rect)
+
+        sliders: list[tuple[str, str, str]] = [
+            ("master",    "Master",    "master_volume"),
+            ("voices",    "Voices",    "voices_master"),
+            ("heartbeat", "Heartbeat", "heartbeat_master"),
+            ("sfx",       "SFX",       "sfx_master"),
+        ]
+
+        dragging_key: str | None = None
+
+        while True:
+            pygame.mouse.set_visible(True)
+            self.display.fill((0, 0, 0))
+
+            title: str = "Audio"
+            self.menu_font.render(self.display, title, (self.internal_w // 2 - self.menu_font.text_width(title) // 2, 20))
+
+            result: str | None = self.render_text_buttons([back_button])
+            if result == "back":
+                self.save_audio_settings()
+                return return_to
+
+            font: Font = self.menu_font
+            bar_w: int = 320
+            bar_h: int = 14
+            bar_x: int = self.internal_w // 2 - bar_w // 2
+            row_h: int = 50
+            y: int = 110
+            slider_rects: dict[str, pygame.Rect] = {}
+
+            for key, label, attr in sliders:
+                value: float = getattr(self, attr)
+                font.render(self.display, label, (bar_x, y))
+                bar_rect = pygame.Rect(bar_x, y + 22, bar_w, bar_h)
+                fill_rect = pygame.Rect(bar_rect.x, bar_rect.y, int(bar_rect.w * value), bar_rect.h)
+                pygame.draw.rect(self.display, (70, 70, 70), bar_rect, border_radius=6)
+                pygame.draw.rect(self.display, (220, 220, 220), fill_rect, border_radius=6)
+                pct: str = f"{int(value * 100)}%"
+                font.render(self.display, pct, (bar_rect.right + 12, y + 18))
+                slider_rects[key] = bar_rect
+                y += row_h
+
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.quit_game()
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    self.save_audio_settings()
+                    return return_to
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    mx, my = self.get_scaled_mouse_pos()
+                    for key, rect in slider_rects.items():
+                        if rect.collidepoint(mx, my):
+                            dragging_key = key
+                            self._set_master_from_mouse(sliders, key, mx, rect)
+                            break
+                if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+                    if dragging_key is not None:
+                        self.save_audio_settings()
+                    dragging_key = None
+                if event.type == pygame.MOUSEMOTION and dragging_key is not None:
+                    mx, _ = self.get_scaled_mouse_pos()
+                    self._set_master_from_mouse(sliders, dragging_key, mx, slider_rects[dragging_key])
+
+            self.scale_display_to_screen()
+            pygame.display.update()
+            self.clock.tick(self.fps)
+
+    def _set_master_from_mouse(self, sliders: list[tuple[str, str, str]], key: str, mx: int, bar_rect: pygame.Rect) -> None:
+        attr: str = next(a for k, _, a in sliders if k == key)
+        value: float = max(0.0, min(1.0, (mx - bar_rect.x) / bar_rect.w))
+        setattr(self, attr, value)
+        self.apply_master_volumes()
 
     def credits_menu(self) -> str:
         back_rect = pygame.Rect(10, 10, self.button_font.text_width("BACK") + 24, self.get_font_height(self.button_font) + 16)
@@ -709,7 +837,10 @@ class Game:
         y += 34
 
         for name, sound in sounds.items():
-            volume: float = sound.get_volume()
+            if title == "SFX":
+                volume: float = self.base_sfx_volumes.get(name, sound.get_volume())
+            else:
+                volume: float = self.base_voice_volumes.get(name, sound.get_volume())
             font.render(self.display, str(name), (50, y))
             bar_rect = pygame.Rect(250, y + 6, 300, 12)
             fill_rect = pygame.Rect(bar_rect.x, bar_rect.y, int(bar_rect.w * volume), bar_rect.h)
@@ -869,27 +1000,66 @@ class Game:
                 data: dict[str, Any] = json.load(file)
 
         except FileNotFoundError:
+            # First run — seed base volumes from current Sound defaults
+            self.base_sfx_volumes = {name: s.get_volume() for name, s in self.sfx.sounds.items()}
+            self.base_voice_volumes = {name: s.get_volume() for name, s in self.sfx.voices.items()}
             return
 
-        for name, volume in data.get("sfx", {}).items():
-            if name in self.sfx.sounds:
-                self.sfx.sounds[name].set_volume(volume)
+        # Per-sound base volumes (these are what the detailed menu edits)
+        self.base_sfx_volumes = {
+            name: float(data.get("sfx", {}).get(name, self.sfx.sounds[name].get_volume()))
+            for name in self.sfx.sounds
+        }
+        self.base_voice_volumes = {
+            name: float(data.get("voices", {}).get(name, self.sfx.voices[name].get_volume()))
+            for name in self.sfx.voices
+        }
 
-        for name, volume in data.get("voices", {}).items():
-            if name in self.sfx.voices:
-                self.sfx.voices[name].set_volume(volume)
+        # Masters + dev mode (backward compatible: old configs without these keys still work)
+        masters: dict[str, Any] = data.get("masters", {})
+        self.master_volume    = float(masters.get("master", 1.0))
+        self.voices_master    = float(masters.get("voices", 1.0))
+        self.heartbeat_master = float(masters.get("heartbeat", 1.0))
+        self.sfx_master       = float(masters.get("sfx", 1.0))
+        if "dev_mode" in data:
+            self.dev_mode = bool(data["dev_mode"])
 
         if hasattr(self.sfx, "ensure_core_sfx_audible"):
             self.sfx.ensure_core_sfx_audible()
 
     def save_audio_settings(self) -> None:
-        data: dict[str, dict[str, float]] = {
-            "sfx": {name: sound.get_volume() for name, sound in self.sfx.sounds.items()},
-            "voices": {name: sound.get_volume() for name, sound in self.sfx.voices.items()},
+        data: dict[str, Any] = {
+            "sfx":    dict(self.base_sfx_volumes),
+            "voices": dict(self.base_voice_volumes),
+            "masters": {
+                "master":    self.master_volume,
+                "voices":    self.voices_master,
+                "heartbeat": self.heartbeat_master,
+                "sfx":       self.sfx_master,
+            },
+            "dev_mode": self.dev_mode,
         }
 
         with open(self.audio_settings_path, "w") as file:
             json.dump(data, file, indent=4)
+
+    def apply_master_volumes(self) -> None:
+        """Push masters to SoundEffects + push effective base volumes to pygame Sound objects."""
+        # 1. Push masters to SoundEffects so runtime playback paths can scale dynamically-set volumes.
+        self.sfx.set_masters(
+            master=self.master_volume,
+            sfx=self.sfx_master,
+            voices=self.voices_master,
+            heartbeat=self.heartbeat_master,
+        )
+
+        # 2. Bake base * masters into the Sound objects for paths that just call .play() with no volume.
+        for name, sound in self.sfx.sounds.items():
+            base = self.base_sfx_volumes.get(name, sound.get_volume())
+            sound.set_volume(base * self.sfx_master * self.master_volume)
+        for name, sound in self.sfx.voices.items():
+            base = self.base_voice_volumes.get(name, sound.get_volume())
+            sound.set_volume(base * self.voices_master * self.master_volume)
 
     def handle_input_audio_menu(self, return_to: str, dragging: AudioDrag | None, content_top: int, content_h: int, total_h: int, max_scroll: int) -> tuple[str | None, AudioDrag | None]:
         for event in pygame.event.get():
@@ -966,9 +1136,10 @@ class Game:
     def set_audio_volume(self, category: str, name: str, mx: int, bar_rect: pygame.Rect) -> None:
         volume: float = max(0, min(1, (mx - bar_rect.x) / bar_rect.w))
         if category == "sfx":
-            self.sfx.sounds[name].set_volume(volume)
+            self.base_sfx_volumes[name] = volume
         elif category == "voices":
-            self.sfx.voices[name].set_volume(volume)
+            self.base_voice_volumes[name] = volume
+        self.apply_master_volumes()
         self.save_audio_settings()
 
 
@@ -1070,8 +1241,9 @@ class Game:
             resting = self.heart_rate.resting_bpm
             maximum = self.heart_rate.max_bpm
             ratio = max(0.0, min(1.0, (bpm - resting) / (maximum - resting)))
+            base = 0.45 + ratio * 0.55
 
-            return 0.45 + ratio * 0.55
+            return base * self.heartbeat_master * self.master_volume
 
     def get_ticks(self) -> int:
         return pygame.time.get_ticks()

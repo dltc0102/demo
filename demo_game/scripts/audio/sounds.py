@@ -80,6 +80,27 @@ class SoundEffects:
 
         self.speech_blip = self.make_blip_sound()
         self.bpm_boost_target = None
+
+        """ master volume multipliers (set externally by game.py) """
+        self.master_volume: float    = 1.0
+        self.sfx_master: float       = 1.0
+        self.voices_master: float    = 1.0
+        self.heartbeat_master: float = 1.0
+
+    def set_masters(self, master: float, sfx: float, voices: float, heartbeat: float) -> None:
+        self.master_volume    = float(master)
+        self.sfx_master       = float(sfx)
+        self.voices_master    = float(voices)
+        self.heartbeat_master = float(heartbeat)
+
+    def _sfx_vol(self, base: float) -> float:
+        return max(0.0, min(1.0, base * self.sfx_master * self.master_volume))
+
+    def _voice_vol(self, base: float) -> float:
+        return max(0.0, min(1.0, base * self.voices_master * self.master_volume))
+
+    def _heartbeat_vol(self, base: float) -> float:
+        return max(0.0, min(1.0, base * self.heartbeat_master * self.master_volume))
     
     def _load_wav(self, path: str) -> pygame.mixer.Sound | None:
         try:
@@ -116,16 +137,18 @@ class SoundEffects:
     def get_game_ticks(self):
         return pygame.time.get_ticks()
     
-    def start_heartbeat(self, bpm=80):
+    def start_heartbeat(self, bpm=80, volume: float = 1.0):
         if not self.heartbeat_sound:
             print("[MISSING SOUND] assets/sounds/heartbeat_single.mp3")
             return
 
         self.heartbeat_active = True
         self.heartbeat_bpm = max(1, float(bpm))
+        self._heartbeat_base_volume: float = float(volume)
 
-        self.heartbeat_sound.set_volume(1)
-        self.heartbeat_channel.set_volume(1)
+        eff = self._heartbeat_vol(self._heartbeat_base_volume)
+        self.heartbeat_sound.set_volume(eff)
+        self.heartbeat_channel.set_volume(eff)
 
         interval = max(280, int(60000 / self.heartbeat_bpm))
         self.last_heartbeat = pygame.time.get_ticks() - interval
@@ -135,15 +158,20 @@ class SoundEffects:
         self.heartbeat_active = False
         self.heartbeat_channel.stop()
 
-    def set_heartbeat_bpm(self, bpm: float) -> None:
+    def set_heartbeat_bpm(self, bpm: float, volume: float | None = None) -> None:
         if not self.heartbeat_sound:
             print("[MISSING SOUND] assets/sounds/heartbeat_single.mp3")
             return
 
         self.heartbeat_active = True
         self.heartbeat_bpm = max(1, float(bpm))
-        self.heartbeat_sound.set_volume(1)
-        self.heartbeat_channel.set_volume(1)
+        if volume is not None:
+            self._heartbeat_base_volume = float(volume)
+
+        base = getattr(self, "_heartbeat_base_volume", 1.0)
+        eff = self._heartbeat_vol(base)
+        self.heartbeat_sound.set_volume(eff)
+        self.heartbeat_channel.set_volume(eff)
 
     def update(self):
         if getattr(self, "heartbeat_active", False): self.play_heartbeat(self.heartbeat_bpm)
@@ -157,9 +185,9 @@ class SoundEffects:
         fade = self._ambient_fade_factor() if hasattr(self, "_ambient_fade_start") else 1.0
         static_vol = (0.10 + ratio * 0.45) * fade
         if self.static_sound:
-            self.static_sound.set_volume(static_vol)
+            self.static_sound.set_volume(self._sfx_vol(static_vol))
         if hasattr(self, "_ambient_channel") and self._ambient_playing:
-            self._ambient_channel.set_volume((0.25 + ratio * 0.40) * fade)
+            self._ambient_channel.set_volume(self._sfx_vol((0.25 + ratio * 0.40) * fade))
 
     def play_heartbeat(self, bpm: float | None = None):
         if not self.heartbeat_sound: return
@@ -168,8 +196,11 @@ class SoundEffects:
         interval = max(240, int(60000 / bpm))
 
         if now - self.last_heartbeat >= interval:
+            base = getattr(self, "_heartbeat_base_volume", 1.0)
+            eff = self._heartbeat_vol(base)
+            self.heartbeat_sound.set_volume(eff)
             self.heartbeat_channel.stop()
-            self.heartbeat_channel.set_volume(self.heartbeat_sound.get_volume())
+            self.heartbeat_channel.set_volume(eff)
             self.heartbeat_channel.play(self.heartbeat_sound)
             self.last_heartbeat = now
 
@@ -178,7 +209,7 @@ class SoundEffects:
         if now - self.last_footstep_time < 340: return
         self.last_footstep_time = now
         sound = random.choice(self.footstep_sounds[surface][self.next_foot])
-        sound.set_volume(0.2)
+        sound.set_volume(self._sfx_vol(0.2))
         self.step_channel.play(sound)
         self.next_foot = "right" if self.next_foot == "left" else "left"
 
@@ -188,7 +219,7 @@ class SoundEffects:
         if not sound:
             print(f"[MISSING SOUND] {key}.mp3 in assets/sounds")
             return None
-        sound.set_volume(0.65)
+        sound.set_volume(self._sfx_vol(0.65))
         self.fridge_channel.stop()
         self.fridge_channel.play(sound)
         return self.fridge_channel
@@ -206,7 +237,12 @@ class SoundEffects:
         if not sound: return None
         channel = sound.play()
         if channel and volume is not None:
-            channel.set_volume(volume)
+            channel.set_volume(self._sfx_vol(volume))
+        elif channel:
+            # No explicit volume — re-assert master scaling on the Sound's current base.
+            # (apply_master_volumes from game.py keeps Sound.get_volume() already-scaled,
+            #  so playing it as-is is correct; nothing to do.)
+            pass
         if bpm_boost > 0 and self.bpm_boost_target is not None:
             self.bpm_boost_target.bump_bpm(bpm_boost)
         return channel
@@ -214,7 +250,7 @@ class SoundEffects:
     def play_voice(self, sound_key: str, volume: float | None = None, bpm_boost: float = 0.0) -> pygame.mixer.Channel | None:
         voice: pygame.mixer.Sound | None = self.load_voice(sound_key)
         if not voice: raise ValueError(f"[MISSING VOICE] {sound_key}")
-        if volume is not None: voice.set_volume(volume)
+        if volume is not None: voice.set_volume(self._voice_vol(volume))
         if bpm_boost > 0 and self.bpm_boost_target is not None:
             self.bpm_boost_target.bump_bpm(bpm_boost)
         for channel in self.voice_channels:
@@ -281,7 +317,7 @@ class SoundEffects:
     def play_speech_blip(self, volume: float = 0.45) -> None:
         if self.speech_channel.get_busy():
             return
-        self.speech_blip.set_volume(volume)
+        self.speech_blip.set_volume(self._sfx_vol(volume))
         self.speech_channel.play(self.speech_blip)
         
     def is_voice_playing(self) -> bool:
@@ -292,13 +328,13 @@ class SoundEffects:
 
     def set_static_volume(self, volume: float) -> None:
         sound = self.sounds.get("static_noise_bg")
-        if sound: sound.set_volume(volume)
+        if sound: sound.set_volume(self._sfx_vol(volume))
 
     def start_whispers(self, volume: float = 0.3) -> None:
         if not self.whisper_sound:
             print("[MISSING SOUND] whispers.wav / schizophrenia_voices.wav")
             return
-        self.whisper_sound.set_volume(volume)
+        self.whisper_sound.set_volume(self._voice_vol(volume))
         self.whisper_channel.stop()
         self.whisper_channel.play(self.whisper_sound, loops=-1)
 
@@ -306,7 +342,7 @@ class SoundEffects:
         if not self.static_sound:
             print("[MISSING SOUND] static_noise_bg.wav")
             return
-        self.static_sound.set_volume(volume)
+        self.static_sound.set_volume(self._sfx_vol(volume))
         self.static_channel.play(self.static_sound, loops=-1)
 
     def stop_whispers(self) -> None:
@@ -314,7 +350,7 @@ class SoundEffects:
 
     def set_whisper_volume(self, volume: float) -> None:
         sound = self.sounds.get("whispers") or self.voices.get("schizophrenia_voices")
-        if sound: sound.set_volume(volume)
+        if sound: sound.set_volume(self._voice_vol(volume))
 
     def start_ambient(self, static_volume: float = 0.15, fade_in_ms: int = 3000) -> None:
         if self.static_sound:
@@ -351,7 +387,7 @@ class SoundEffects:
         if self.bpm_boost_target is None and self.static_sound is not None:
             fade = self._ambient_fade_factor()
             base = getattr(self, "_static_base_volume", 0.15)
-            self.static_sound.set_volume(base * fade)
+            self.static_sound.set_volume(self._sfx_vol(base * fade))
 
         if self._ambient_playing and not self._ambient_channel.get_busy():
             self._ambient_playing = False
@@ -373,7 +409,7 @@ class SoundEffects:
             self._ambient_next_time = now + random.randint(15_000, 30_000)
             return
 
-        chosen_sound.set_volume(random.uniform(0.25, 0.55))
+        chosen_sound.set_volume(self._sfx_vol(random.uniform(0.25, 0.55)))
         self._ambient_channel.stop()
         self._ambient_channel.play(chosen_sound, loops=0)
         self._ambient_last = chosen_key
@@ -394,7 +430,7 @@ class SoundEffects:
     def resume_gameplay_audio(self, static_volume: float = 0.15) -> None:
         self.heartbeat_active = True
         if self.static_sound:
-            self.static_sound.set_volume(static_volume)
+            self.static_sound.set_volume(self._sfx_vol(static_volume))
             self.static_channel.play(self.static_sound, loops=-1)
         if hasattr(self, "_ambient_next_time"):
             self._ambient_next_time = pygame.time.get_ticks() + random.randint(5_000, 12_000)
