@@ -3,7 +3,7 @@
 
 a = Analysis(
     ['game.py'],
-    pathex=[],
+    pathex=['.'],
     binaries=[],
     datas=[('assets', 'assets'), ('audio_config.json', '.'), ('credits.json', '.'), ('scripts/scenes/interactables.json', 'scripts/scenes')],
     hiddenimports=['paths'],
