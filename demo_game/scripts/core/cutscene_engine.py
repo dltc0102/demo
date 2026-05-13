@@ -1,3 +1,4 @@
+import random
 
 class _CutsceneHandle:
     def __init__(self, cutscene, runner):
@@ -11,7 +12,6 @@ class _CutsceneHandle:
 
     def __iter__(self):
         yield from self.runner()
-
 
 class _VoiceHandle:
     def __init__(self, cutscene, sound_key):
@@ -146,3 +146,49 @@ class CutsceneEngine:
     def spawn_racethink(self, lines, target, stall: int = 700, curve: bool = True):
         self.game.thought_manager.racethink(lines, target, stall=stall, curve=curve)
         yield
+
+    def random_overlap_voices(self, pool, weights=(0.55, 0.30, 0.15), volume=None):
+        def runner():
+            if not pool: return
+            count = random.choices([1, 2, 3], weights=weights, k=1)[0]
+            picked_n = min(count, len(pool))
+            picks = random.sample(list(pool), picked_n)
+            lead = picks[0]
+            self.game.sfx.play_voice(lead, volume)
+            for extra in picks[1:]:
+                self.play_overlap_audio(extra, volume)
+            yield from self.wait_until_voice_finished()
+        return _CutsceneHandle(self, runner)
+    
+    def mom_talk(self, mom, conversation_key, dialogue_tree):
+        def runner():
+            if conversation_key not in dialogue_tree.conversations:
+                return
+            conv = dialogue_tree.conversations[conversation_key]
+            from scripts.ui.mom_dialogue import MomDialogueChoice
+            dialogue_choice = MomDialogueChoice(self.game, conv["question"], conv["choices"], mom)
+            mom.set_speaking(True)
+            if not hasattr(self.game, "mom_dialogue_choice"):
+                self.game.mom_dialogue_choice = None
+            self.game.mom_dialogue_choice = dialogue_choice
+            while not dialogue_choice.is_finished():
+                yield
+            mom.set_speaking(False)
+            self.game.mom_dialogue_choice = None
+            choice_idx = dialogue_choice.selected_choice
+            if choice_idx is not None and choice_idx in conv["responses"]:
+                response = conv["responses"][choice_idx]
+                mom.set_speaking(True)
+                yield from self.say(response, mom, stall=1200, interval=30)
+                mom.set_speaking(False)
+        return _CutsceneHandle(self, runner)
+    
+    def mom_talk_sequence(self, mom, conversation_keys, dialogue_tree):
+        def runner():
+            for i, conversation_key in enumerate(conversation_keys):
+                if conversation_key not in dialogue_tree.conversations:
+                    continue
+                if i > 0:
+                    yield from self.wait(800)
+                yield from self.mom_talk(mom, conversation_key, dialogue_tree)
+        return _CutsceneHandle(self, runner)

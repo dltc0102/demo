@@ -5,12 +5,15 @@ from scripts.core.walkable_zone import WalkableZone
 
 
 class InteractableDef:
-    def __init__(self, zone: InteractZone, flags_true: list[str], flags_false: list[str], interaction_condition: list[str], not_flags: list[str]):
+    def __init__(self, zone: InteractZone, flags_true: list[str], flags_false: list[str], interaction_condition: list[str], not_flags: list[str], voices=None, dialogue=None, action=None):
         self.zone = zone
         self.flags_true = flags_true
         self.flags_false = flags_false
         self.interaction_condition = interaction_condition
         self.not_flags = not_flags
+        self.voices = voices or []
+        self.dialogue = dialogue
+        self.action = action
 
     def can_interact(self, flags: dict) -> bool:
         if not all(flags.get(k, False) for k in self.interaction_condition):
@@ -34,6 +37,10 @@ def _ensure_flags(scene, *flag_lists: list[str]) -> None:
             if key not in scene.flags:
                 scene.flags[key] = False
 
+def _cfg_bool(value, default=True) -> bool:
+    if value is None: return default
+    if isinstance(value, str): return value.strip().lower() not in {"false", "0", "no", "off"}
+    return bool(value)
 
 def load_interactables(json_path: str | Path, scene, font, glow_surf) -> tuple[dict[str, "InteractableDef"], dict[str, WalkableZone]]:
     with open(json_path, "r", encoding="utf-8") as f:
@@ -74,6 +81,8 @@ def load_interactables(json_path: str | Path, scene, font, glow_surf) -> tuple[d
                 glow_surf=glow_surf,
                 proximity_inflate=cfg.get("proximity_inflate", 40),
                 fade_speed=cfg.get("fade_speed", 650),
+                show_glow=_cfg_bool(cfg.get("show_glow"), True),
+                prompt_position=cfg.get("prompt_position", "center"),
             )
             interactables[zone_id] = InteractableDef(
                 zone=zone,
@@ -81,6 +90,9 @@ def load_interactables(json_path: str | Path, scene, font, glow_surf) -> tuple[d
                 flags_false=flags_false,
                 interaction_condition=condition,
                 not_flags=not_flags,
+                voices=cfg.get("voices", []),
+                dialogue=cfg.get("dialogue"),
+                action=cfg.get("action"),
             )
 
     return interactables, walkables

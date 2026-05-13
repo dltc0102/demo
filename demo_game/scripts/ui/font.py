@@ -11,7 +11,7 @@ def clip(surf, x, y, x_size, y_size):
 class Font():
     def __init__(self, path, scale=1):
         self.scale = scale
-        self.spacing = 1 * self.scale
+        self.spacing = max(1, int(1 * self.scale))
         self.character_order = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z','a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z','.','-',',',':','+','\'','!','?','0','1','2','3','4','5','6','7','8','9', '_', '<', '>', '[', ']', '(', ')', '{', '}', '%'
         ]
         font_img, font_w, font_h = load_image(path, convert_black=True)
@@ -24,7 +24,7 @@ class Font():
                 char_img = clip(font_img, x - current_char_width, 0, current_char_width, font_h)
                 char_img = pygame.transform.scale(
                     char_img,
-                    (char_img.get_width() * self.scale, char_img.get_height() * self.scale)
+                    (max(1, int(char_img.get_width() * self.scale)), max(1, int(char_img.get_height() * self.scale)))
                 )
                 self.characters[self.character_order[character_count]] = char_img.copy()
                 character_count += 1
@@ -51,7 +51,6 @@ class Font():
                 width += self.characters[char].get_width() + self.spacing
         return width
 
-
     def wrap_text(self, text: str, max_width: int):
         words = text.split(' ')
         lines = []
@@ -67,19 +66,12 @@ class Font():
 
         if current_line:
             lines.append(current_line.strip())
-
         return lines
-
 
     def render_wrapped(self, surf, text, loc, max_width, line_spacing=2):
         lines = self.wrap_text(text, max_width)
-
         x, y = loc
         char_height = next(iter(self.characters.values())).get_height()
-
         for line in lines:
             self.render(surf, line, (x, y))
             y += char_height + line_spacing
-
-
-        

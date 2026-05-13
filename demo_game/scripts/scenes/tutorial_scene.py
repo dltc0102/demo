@@ -15,7 +15,7 @@ class TutorialScene:
         self.font = pygame.font.Font(asset("assets/fonts/Minecraftia-Regular.ttf"), 22)
 
         self.lines = [
-            "Use A and D keys to move around.",
+            "Use the WASD keys to move around.",
             "Press E to interact.",
             "Esc to pause and resume.",
         ]

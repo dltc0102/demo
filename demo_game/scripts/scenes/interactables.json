@@ -1,7 +1,7 @@
 {
   "kitchen_fridge": {
     "id": "fridge",
-    "prompt": "Press [E] to open",
+    "prompt": "[E] Open",
     "world_offset": "kitchen_x",
     "points": [
       [560, 136],
@@ -10,29 +10,33 @@
       [636, 444],
       [560, 412]
     ],
+    "show_glow": true,
     "proximity_inflate": 40,
     "fade_speed": 650,
     "flags_true": ["is_fridge_open", "fridge_seen"],
     "flags_false": [],
     "interaction_condition": ["in_kitchen"],
-    "not_flags": ["fridge_seen"]
+    "not_flags": ["fridge_seen"],
+    "prompt_position": "top"
   },
   "bedroom_closet": {
     "id": "closet",
-    "prompt": "Press [E] to change",
+    "prompt": "[E] Change",
     "points": [
       [557, 294],
       [704, 294],
       [704, 416],
       [557, 416]
     ],
+    "show_glow": true,
     "flags_true": ["clothes_changed", "ready_to_go"],
     "flags_false": ["show_bedroom_pulse"],
-    "interaction_condition": ["is_next_day", "in_bedroom"]
+    "interaction_condition": ["is_next_day", "in_bedroom"],
+    "prompt_position": "top"
   },
   "bedroom_lamp": {
     "id": "lamp",
-    "prompt": "Press [E] to interact",
+    "prompt": "[E] Interact",
     "points": [
       [29, 260],
       [56, 262],
@@ -41,45 +45,52 @@
       [2, 437],
       [2, 305]
     ],
+    "show_glow": false,
     "proximity_inflate": 20,
     "fade_speed": 650,
-    "flags_true": ["interacted_with_lamp"],
+    "flags_true": [],
     "flags_false": [],
-    "interaction_condition": ["in_bedroom"]
+    "interaction_condition": ["in_bedroom"],
+    "prompt_position": "top",
+    "action": "*click*"
   },
   "bedroom_window": {
     "id": "window",
-    "prompt": "Press [E] to interact",
+    "prompt": "[E] Interact",
     "points": [
       [278, 96],
       [557, 92],
       [547, 338],
       [278, 338]
     ],
+    "show_glow": true,
     "proximity_inflate": 20,
     "fade_speed": 650,
     "flags_true": ["interacted_with_window"],
     "flags_false": [],
-    "interaction_condition": ["in_bedroom"]
+    "interaction_condition": ["in_bedroom"],
+    "prompt_position": "top"
   },
   "bedroom_picture_frame": {
     "id": "picture_frame",
-    "prompt": "Press [E] to inspect",
+    "prompt": "[E] Inspect",
     "points": [
       [654, 256],
       [695, 256],
       [695, 287],
       [654, 292]
     ],
-    "proximity_inflate": 20,
+    "show_glow": true,
+    "proximity_inflate": 260,
     "fade_speed": 650,
-    "flags_true": ["picture_seen", "interacted_with_picture_frame"],
+    "flags_true": [],
     "flags_false": [],
-    "interaction_condition": ["in_bedroom"]
+    "interaction_condition": ["in_bedroom"],
+    "prompt_position": "bottom"
   },
   "exit_door": {
     "id": "exit_door",
-    "prompt": "Press [E] to interact",
+    "prompt": "[E] Interact",
     "world_offset": "kitchen_x",
     "points": [
       [715, 320],
@@ -87,13 +98,14 @@
       [720, 461],
       [715, 461]
     ],
+    "show_glow": false,
     "proximity_inflate": 20,
     "fade_speed": 650,
     "flags_true": ["interacted_with_exit"],
     "flags_false": [],
-    "interaction_condition": ["in_kitchen"]
+    "interaction_condition": ["in_kitchen"],
+    "prompt_position": "top"
   },
-
   "walkable_bedroom": {
     "id": "walkable_bedroom",
     "kind": "walkable",
@@ -106,6 +118,7 @@
       [718, 533],
       [2, 533]
     ],
+    "show_glow": false,
     "prohibited_points": [],
     "min_scale": 0.6,
     "interaction_condition": ["in_bedroom"]
@@ -124,6 +137,7 @@
       [718, 545],
       [2, 545]
     ],
+    "show_glow": false,
     "prohibited_points": [],
     "min_scale": 0.6,
     "interaction_condition": ["in_kitchen"]

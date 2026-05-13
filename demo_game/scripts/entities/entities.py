@@ -42,10 +42,9 @@ class Player(PhysicsEntity):
 
         self.idle_dir = Path(asset("assets/entities/player/idle"))
         self.walk_dir = Path(asset("assets/entities/player/walk"))
+        self.sprite_canvas_size = (100, 162)
 
-        self.idle_frames = self.load_frames(
-            self.idle_dir, "sloopy_idle*.png", "idle"
-        )
+        self.idle_frames = self.load_frames(self.idle_dir, "sloopy_idle*.png", "idle")
         
         if self.idle_frames:
             idle_w, idle_h = self.idle_frames[0].get_size()
@@ -53,9 +52,7 @@ class Player(PhysicsEntity):
             self.game.player_h = idle_h
             self.size = (idle_w, idle_h)
 
-        self.walk_frames = self.load_frames(
-            self.walk_dir, "*.png", "walk"
-        )
+        self.walk_frames = self.load_frames(self.walk_dir, "*.png", "walk")
 
         self.sprite_default_facing = "right"
 
@@ -87,6 +84,7 @@ class Player(PhysicsEntity):
 
         self.base_size: tuple[int, int] = tuple(self.size)
         self.scale: float = 1.0
+        self.disable_gravity: bool = False
 
     def set_scale(self, scale: float) -> None:
         scale = max(0.05, float(scale))
@@ -157,11 +155,7 @@ class Player(PhysicsEntity):
         for path in frame_paths:
             try:
                 img = pygame.image.load(str(path)).convert_alpha()
-
-                if animation_name == "walk":
-                    img = self.fit_to_idle_visible_size(img)
-
-                img = self.scale_to_width(img, 64)  # ← add this
+                img = self.fit_sprite_to_canvas(img, self.sprite_canvas_size)
                 frames.append(img)
 
             except pygame.error as error:
@@ -178,6 +172,14 @@ class Player(PhysicsEntity):
 
     def update(self, movement=(0, 0), dt=1 / 60):
         self.last_movement_x = movement[0]
+
+        if self.disable_gravity:
+            self.velocity[1] = 0
+            self.pos[0] += movement[0]
+            self.pos[1] += movement[1]
+            self.grounded = True
+            self.update_animation(dt)
+            return
 
         self.velocity[1] += self.gravity * dt
         self.velocity[1] = min(self.velocity[1], self.max_fall_speed)
@@ -254,7 +256,7 @@ class Player(PhysicsEntity):
             )
             return
 
-        if self.scale < 0.999:
+        if abs(self.scale - 1.0) > 0.001:
             image = pygame.transform.scale(image, self.size)
 
         rot = float(getattr(self, "rotation", 0.0))

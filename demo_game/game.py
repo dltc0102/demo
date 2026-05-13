@@ -152,7 +152,7 @@ class Game:
         self.ghosts: list[Ghost] = []
         self.mechanic1_active: bool = False
         self.mechanic1_used: bool = False
-        self.ghost_random_active: bool = True
+        self.ghost_random_active: bool = False
         self.next_ghost_time: int = pygame.time.get_ticks() + random.randint(6000, 14000)
 
         self.next_ghost_stress_time: int = 0
@@ -551,6 +551,11 @@ class Game:
 
     """ mechanics """
     def activate_mechanic1(self) -> None:
+        if not self.ghost_random_active:
+            self.ghosts.clear()
+            self.mechanic1_active = False
+            return
+
         if self.ghosts:
             if all(getattr(ghost, "reached_target", False) for ghost in self.ghosts):
                 for ghost in self.ghosts:

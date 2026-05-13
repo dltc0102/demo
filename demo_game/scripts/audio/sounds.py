@@ -24,6 +24,8 @@ class SoundEffects:
             "tiles_left2": "walking_on_tiles_left2",
             "tiles_right1": "walking_on_tiles_right1",
             "tiles_right2": "walking_on_tiles_right2",
+            "pill_bottle": "opening_pill_bottle",
+            "inf_laughter": "infectious_laughter",
         }
 
         """ footstep randomizer """
@@ -43,7 +45,7 @@ class SoundEffects:
 
 
         """ sounds """
-        self.heartbeat_sound            = self.amplify_sound(self.load_sound('heartbeat'), gain=2.5)
+        self.heartbeat_sound            = self.amplify_sound(self.load_sound('heartbeat'), gain=4.5)
         self.pouring_milk_sound         = self.load_sound('pouring_milk')
         self.fridge_door_open_sound     = self.load_sound('fridge_door_open')
         self.fridge_door_close_sound    = self.load_sound('fridge_door_close')

@@ -7,6 +7,8 @@ from scripts.ui.font import Font
 from scripts.core.interact import InteractZone
 from scripts.core.walkable_zone import WalkableZone
 from scripts.core.interactables_loader import load_interactables
+from scripts.entities.mom import Mom
+from scripts.ui.mom_dialogue import MomDialogueTree
 from paths import asset
 
 class FirstScene:
@@ -19,6 +21,7 @@ class FirstScene:
 
         self.asset_paths: dict[str, str] = {
             'bedroom_night'     : asset('assets/backgrounds/bedroom_night.png'),
+            'bedroom_night_lamp_off': asset('assets/backgrounds/bedroom_night_lamp_off.png'),
             'kitchen_night'     : asset('assets/backgrounds/kitchen_night.png'),
             'fridge_open'       : asset('assets/backgrounds/kitchen_night_fridge_open.png'),
             'milk_img'          : asset('assets/entities/glass_of_milk.png'),
@@ -29,6 +32,7 @@ class FirstScene:
         }
 
         self.bedroom_night_img, *_  = load_image(self.asset_paths['bedroom_night'])
+        self.bedroom_night_lamp_off_img, *_ = load_image(self.asset_paths['bedroom_night_lamp_off'])
         self.kitchen_night_img, *_  = load_image(self.asset_paths['kitchen_night'])
         self.fridge_open_img, *_    = load_image(self.asset_paths['fridge_open'])
         self.milk_img, *_           = load_image(self.asset_paths['milk_img'])
@@ -67,7 +71,14 @@ class FirstScene:
             "bed_sleep_done"        : False,
             "finished_getting_milk" : False,
             "back_to_bedroom"       : False,
+            "is_attempt_over"       : True,
+            "lamp_off"              : False,
+            "picture_zoom_active"   : False,
         }
+        
+        self.window_cooldown_until = 0
+        self.window_cooldown_duration = 5000
+        self.milk_result_type = "milk"
 
         """ doors & collision areas """
         self.bed_rect                   = pygame.Rect(95, 305, 210, 120)
@@ -99,9 +110,9 @@ class FirstScene:
         self.milk_in_hand_img = pygame.transform.scale(self.milk_img, (18, 22))
 
         self.milk_attempt_count: int = 0
-        self.forced_milk_failures: int = 5
+        self.forced_milk_failures: int = 2
         self.max_milk_attempts: int = self.forced_milk_failures + 1
-        self.mom_fail_attempt: int = 5
+        self.mom_fail_attempt: int = 0
         self._was_psychosis: bool = False
         self._fall_anim_t: float = 0.0
         self._dot_shake_until: int = 0
@@ -123,6 +134,7 @@ class FirstScene:
             {
                 "reason": "you poured water. that's not right.",
                 "display_reason": "You poured water",
+                "milk_result": "water",
                 "sound": "wash_one_cup",
                 "voices": ["thats_water", "thats_not_milk"],
                 "thoughts": ["water", "that's not milk", "why did I do that?"],
@@ -131,6 +143,7 @@ class FirstScene:
             {
                 "reason": "you poured juice. that's not right.",
                 "display_reason": "You poured the wrong liquid",
+                "milk_result": "juice",
                 "sound": "wash_one_cup",
                 "voices": ["thats_juice_not_milk", "wrong_bottle_you_stupid", "everyone_saw_that"],
                 "thoughts": ["juice?", "wrong one", "focus"],
@@ -139,14 +152,16 @@ class FirstScene:
             {
                 "reason": "you poured it away because it felt unsafe.",
                 "display_reason": "You poured it away",
+                "milk_result": "expired",
                 "sound": "wash_one_cup",
-                "voices": ["i_poisoned_it", "thats_gone_bad", "pour_it_away", "poison_wonderful"],
+                "voices": ["i_poisoned_it", "thats_gone_bad", "pour_that_away", "poison_wonderful"],
                 "thoughts": ["poison?", "gone bad?", "pour it away", "but was it milk?"],
                 "realization_lines": ["wait wasn't that milk?", "that WAS milk?", "you told me that was POISON", "you said it had gone bad", "arghhh", "i shouldn't listen to you"],
             },
             {
                 "reason": "your hand slipped. the glass hit the floor.",
                 "display_reason": "The glass fell to the ground",
+                "milk_result": "dropped",
                 "sound": "glass_shatter",
                 "voices": ["good_job_you_dropped_it", "you_made_a_mess"],
                 "thoughts": ["too loud", "broken glass", "clean it up"],
@@ -155,6 +170,7 @@ class FirstScene:
             {
                 "reason": "you poured it away. you thought it was your mom telling you to.",
                 "display_reason": "You listened to your mom",
+                "milk_result": "expired",
                 "sound": "wash_one_cup",
                 "voices": ["honey_thats_gone_bad_pour_it_away"],
                 "thoughts": ["that was mom's voice", "wasn't it?", "why did I listen?"],
@@ -185,6 +201,9 @@ class FirstScene:
         """ sticky note """
         self.sticky_note_font = pygame.font.Font(asset("assets/fonts/Retrogression-Regular.ttf"), 25)
         self.menu_font = Font(asset("assets/fonts/large_font_white.png"), scale=1)
+        self.interact_prompt_font = Font(asset("assets/fonts/large_font_white.png"), scale=1.0)
+        self.sticky_hint_font = Font(asset("assets/fonts/large_font_white.png"), scale=0.8)
+        self.drink_prompt_alpha = 0
         self.current_sticky_note_lines = None
         self.groceries_task = ["cereal", "fruits", "vegetables", "milk", "toilet rolls"]
         self.sticky_note_icon_rect = None
@@ -193,6 +212,10 @@ class FirstScene:
 
         """ closet """
         self.closet_rect = pygame.Rect(557, 294, 147, 122)
+        
+        """ mom entity """
+        self.mom = Mom(self.game, [400, 250])
+        self.mom_dialogue_tree = MomDialogueTree()
 
         """ interactables (loaded from JSON) """
         self.flags.setdefault("in_kitchen", False)
@@ -200,7 +223,7 @@ class FirstScene:
         self.interactables, self.walkables = load_interactables(
             asset("scripts/scenes/interactables.json"),
             scene=self,
-            font=self.game.heart_ui_font,
+            font=self.interact_prompt_font,
             glow_surf=self.glow,
         )
         self.fridge_zone = self.interactables["kitchen_fridge"].zone
@@ -248,15 +271,42 @@ class FirstScene:
     def update_room_flags(self) -> None:
         self.flags["in_kitchen"] = bool(self.in_kitchen)
         self.flags["in_bedroom"] = not self.in_kitchen
+        self.game.player.disable_gravity = self.get_active_walkable() is not None
 
     def update_all_interactables(self, dt: float) -> None:
         player_rect = self.game.player.rect()
-        for entry in self.interactables.values():
+        for zone_id, entry in self.interactables.items():
+            if zone_id == "bedroom_window":
+                if pygame.time.get_ticks() < self.window_cooldown_until or self.game.cutscene.sequence:
+                    entry.zone.update(dt, pygame.Rect(-10000, -10000, 1, 1), self.scroll_x)
+                    continue
+            if zone_id == "bedroom_picture_frame" and self.flags.get("picture_zoom_active"):
+                entry.zone.update(dt, pygame.Rect(-10000, -10000, 1, 1), self.scroll_x)
+                continue
             if not entry.can_interact(self.flags):
                 entry.zone.update(dt, pygame.Rect(-10000, -10000, 1, 1), self.scroll_x)
                 continue
             entry.zone.update(dt, player_rect, self.scroll_x)
-            entry.zone.render(self.game.display, self.scroll_x)
+
+    def render_active_interactable_prompt(self) -> None:
+        active = self.get_closest_visible_interactable()
+        if active is None: return
+        active.zone.render(self.game.display, self.scroll_x)
+
+    def get_closest_visible_interactable(self):
+        player_rect = self.game.player.rect()
+        px, py = player_rect.centerx, player_rect.centery
+        best = None
+        best_dist = float("inf")
+        for entry in self.interactables.values():
+            if not entry.zone.is_visible: continue
+            if not entry.can_interact(self.flags): continue
+            cx, cy = entry.zone._bounding_rect.center
+            d = (cx - px) ** 2 + (cy - py) ** 2
+            if d < best_dist:
+                best_dist = d
+                best = entry
+        return best
 
     def get_active_walkable(self) -> "WalkableZone | None":
         for w in self.walkables.values():
@@ -332,6 +382,7 @@ class FirstScene:
             self.render_note_interaction()
             self.render_glow_prompt()
             self.render_sticky_note_icon()
+            self.render_drink_prompt(dt)
             mx, my = self.mouse_helper()
             # pygame.draw.rect(self.game.display, (255, 255, 255, 100), (64, 128, 64, 128))
 
@@ -349,6 +400,11 @@ class FirstScene:
 
             self.update_transition(dt)
             self.game.player.render(self.game.display, offset=(self.scroll_x, 0))
+            
+            self.mom.update(dt)
+            self.mom.render(self.game.display, offset=(self.scroll_x, 0))
+            
+            self.render_active_interactable_prompt()
             self.render_milk_in_hand()
             if not self.started and elapsed > 1000:
                 self.started = True
@@ -372,7 +428,12 @@ class FirstScene:
 
             self.game.thought_manager.render(self.game.display, offset=(self.scroll_x, 0))
             self.game.dialogue_manager.render(self.game.display, offset=(self.scroll_x, 0))
+            
+            if hasattr(self.game, "mom_dialogue_choice") and self.game.mom_dialogue_choice:
+                self.game.mom_dialogue_choice.update(dt)
+                self.game.mom_dialogue_choice.render(self.game.display)
 
+            self.render_picture_frame_zoom()
             self.render_open_sticky_note()
             self.game.handle_pause_button()
             result = self.handle_events()
@@ -452,16 +513,9 @@ class FirstScene:
             self.script.racethink("what's going on", self.game.player),
         )
         self.game.set_heartbeat_bpm(90)
-        yield from itertools.chain(
-            self.script.say(
-                ["huh? I'm-", "im not", "i can't help it", "they stress me out"], 
-                self.game.player
-            ),
-            self.script.wait(1000),
-            self.script.say(
-                ["hello-?", "they don't respond to what I say", "they just talk whenever they want to", "i cant- control them"], 
-                self.game.player
-            ),
+        yield from self.script.say(
+            ["hello-?", "they don't respond to what I say", "they just talk whenever they want to", "i cant- control them"], 
+            self.game.player
         )
         self.game.set_heartbeat_bpm(80)
         self.flags["door_unlocked"] = True
@@ -530,7 +584,7 @@ class FirstScene:
         yield from self.script.wait(1250)
 
         yield from self.script.play_voice("why_are_you_so_slow")
-        self.flags["show_bedroom_pulse"] = True
+        self.flags["show_bedroom_pulse"] = False
         yield from self.script.cloudthink(
             [
                 "need sleep",
@@ -553,22 +607,63 @@ class FirstScene:
         self.flags["finished_getting_milk"] = True
         return
     
-    def go_to_bed(self):
+    def drink_milk(self):
         self.game.player_movement = [0, 0]
-        self.flags["back_to_bedroom"] = True if not self.in_kitchen else False
-        self.flags["holding_milk"] = False
-        self.flags["drank_milk"] = True
+        self.flags["drinking_milk"] = True
 
         drinking_sounds = self.game.sfx.drinking_sounds.copy()
         random.shuffle(drinking_sounds)
-
         for sound in drinking_sounds:
             if not sound: continue
             self.game.sfx.play(sound)
             yield from self.script.wait(500)
 
-        self.game.set_heartbeat_bpm(90)
         self.game.sfx.play_key("glass_on_table")
+        yield from self.script.wait(300)
+
+        scenarios = [
+            {
+                "thoughts": ["this tastes bad", "it did really go bad", "ugh", "tastes expired"],
+                "voices":   ["thats_gone_bad", "pour_that_away", "honey_thats_gone_bad_pour_it_away", "dont_drink_it"],
+                "bpm":      105,
+            },
+            {
+                "thoughts": ["mmm...", "wait", "this isn't milk", "let me smell it", "oh that's juice"],
+                "voices":   ["thats_juice_not_milk", "thats_not_milk", "dont_drink_that"],
+                "bpm":      95,
+            },
+            {
+                "thoughts": ["...", "this is water", "what on earth was i doing?!"],
+                "voices":   ["thats_water", "thats_not_milk", "why_are_you_so_slow"],
+                "bpm":      100,
+            },
+            {
+                "thoughts": ["yum, maybe i got lucky", "i finally got milk"],
+                "voices":   ["took_you_long_enough", "good_job_you_dropped_it", "you_already_did_this"],
+                "bpm":      85,
+            },
+        ]
+        scenario = random.choice(scenarios)
+
+        self.game.set_heartbeat_bpm(scenario["bpm"])
+        yield from self.script.say(scenario["thoughts"], self.game.player)
+        yield from self.script.wait(200)
+        yield from self.script.random_overlap_voices(scenario["voices"])
+        yield from self.script.wait(400)
+
+        self.flags["holding_milk"] = False
+        self.flags["drank_milk"] = True
+        self.flags["drinking_milk"] = False
+        if not self.flags["read_sticky_note"]:
+            self.flags["force_note_glow"] = True
+        else:
+            self.flags["can_sleep"] = True
+
+    def go_to_bed(self):
+        self.game.player_movement = [0, 0]
+        self.flags["back_to_bedroom"] = True if not self.in_kitchen else False
+
+        self.game.set_heartbeat_bpm(90)
         yield from self.script.wait(450)
         self.game.sfx.play_footstep("wood")
         yield from self.script.wait(320)
@@ -590,7 +685,7 @@ class FirstScene:
         self.flags['is_next_day'] = True
         self.game.start_heartbeat(bpm=70)
         self.game.sfx.play_key("inf_laughter")
-        self.game.sfx.play_key("xswl")
+        yield from self.script.play_voice("xswl")
         yield from self.script.wait(1000)
         yield from self.script.say(["yaaaawwwwnnn", "what's all the fuzz in the morning?", "mom? are you here-?"], self.game.player)
         yield from self.script.play_voice("horse_in_the_backyard")
@@ -758,6 +853,11 @@ class FirstScene:
 
             if is_mbdown and event.button == 1:
                 mx, my = self.get_mouse_pos()
+                
+                if hasattr(self.game, "mom_dialogue_choice") and self.game.mom_dialogue_choice:
+                    choice_result = self.game.mom_dialogue_choice.handle_click(mx, my)
+                    if choice_result is not None:
+                        continue
 
                 if self.flags["sticky_note_open"]:
                     if self.note_close_rect and self.note_close_rect.collidepoint(mx, my):
@@ -793,12 +893,49 @@ class FirstScene:
 
 
     def _do_interact(self) -> str | None:
-        handled_ids = {"bedroom_closet", "kitchen_fridge"}
+        if self.flags.get("picture_zoom_active"):
+            self.flags["picture_zoom_active"] = False
+            return None
+        
+        active_zone_id = self.get_active_interactable_id()
+
+        if active_zone_id == "bedroom_lamp":
+            was_off = self.flags.get("lamp_off", False)
+            self.flags["lamp_off"] = not was_off
+            self.flags["interacted_with_lamp"] = True
+            if was_off:
+                self.game.sfx.play_key("lamp_turn_on")
+            else:
+                self.game.sfx.play_key("lamp_turn_off")
+            if not was_off:
+                entry = self.interactables.get("bedroom_lamp")
+                if entry is not None:
+                    self.run_interactable_content(entry)
+            return None
+        if active_zone_id == "bedroom_window":
+            if self.game.cutscene.sequence:
+                return None
+            self.window_cooldown_until = pygame.time.get_ticks() + self.window_cooldown_duration
+            self.game.cutscene.start(self.bedroom_window_push_cutscene())
+            return None
+
+        if active_zone_id == "bedroom_picture_frame":
+            self.flags["picture_seen"] = True
+            self.flags["interacted_with_picture_frame"] = True
+            self.flags["picture_zoom_active"] = not self.flags.get("picture_zoom_active", False)
+            return None
+
+        if self.flags.get("holding_milk") and not self.flags.get("drank_milk") and not self.flags.get("drinking_milk"):
+            self.game.cutscene.start(self.drink_milk())
+            return None
+
+        handled_ids = {"bedroom_closet", "kitchen_fridge", "bedroom_lamp", "bedroom_picture_frame"}
         for zone_id, entry in self.interactables.items():
             if zone_id in handled_ids:
                 continue
             if entry.zone.is_visible and entry.can_interact(self.flags):
                 entry.apply_flags(self.flags)
+                self.run_interactable_content(entry)
 
         if self.closet_zone.is_visible and self.flags["is_next_day"]:
             self.flags["clothes_changed"] = True
@@ -821,6 +958,44 @@ class FirstScene:
             self.flags["fridge_seen"] = True
             self.flags["note_unlocked"] = True
         return None
+
+    def get_active_interactable_id(self) -> str | None:
+        active = self.get_closest_visible_interactable()
+        if active is None: return None
+        for zone_id, entry in self.interactables.items():
+            if entry is active:
+                return zone_id
+        return None
+
+    def bedroom_window_push_cutscene(self):
+        self.flags["interacted_with_window"] = True
+        base_y = self.game.player.pos[1]
+        for offset in [-8, 6, -4, 0]:
+            self.game.player.pos[1] = base_y + offset
+            yield from self.script.wait(70)
+        self.game.player.pos[1] = base_y
+        yield from self.script.say(["?!- thought i felt someone push me towards the window", "that push felt so real"], self.game.player)
+        
+    def run_interactable_content(self, entry) -> None:
+        voices = getattr(entry, "voices", [])
+        dialogue = getattr(entry, "dialogue", None)
+        action = getattr(entry, "action", None)
+        if not voices and dialogue is None and not action: return
+        if self.game.cutscene.sequence: return
+        self.game.cutscene.start(self.interactable_content_cutscene(voices, dialogue, action))
+
+    def interactable_content_cutscene(self, voices, dialogue, action):
+        for voice in voices:
+            if str(voice) in getattr(self.game.sfx, "voices", {}):
+                yield from self.script.play_voice(str(voice))
+            elif str(voice) in getattr(self.game.sfx, "sounds", {}):
+                self.game.sfx.play_key(str(voice))
+                yield from self.script.wait(700)
+        if dialogue is not None:
+            lines = dialogue if isinstance(dialogue, list) else [dialogue]
+            yield from self.script.say(lines, self.game.player)
+        if action:
+            self.queue_action_prompt(str(action))
 
     def _do_toggle_sticky_note(self) -> None:
         if self.flags["read_sticky_note"] and not self.flags["sticky_note_complete"]:
@@ -852,13 +1027,29 @@ class FirstScene:
             self.generate_sticky_note_lines()
             self.flags["force_note_glow"] = False
             self.flags["can_sleep"] = True
+            self.game.cutscene.start(self.sticky_note_reaction())
         elif not self.flags["sticky_note_open"]:
             self.generate_sticky_note_lines()
         self.flags["sticky_note_open"] = True
         self.game.sfx.play_key("page_flip")
         return None
+    
+    def sticky_note_reaction(self):
+        yield from self.script.wait(800)
+        yield from self.script.say(["groceries?"], self.game.player)
+        yield from self.script.wait(400)
+        yield from self.script.say(["oh no"], self.game.player)
+        yield from self.script.wait(600)
+        yield from self.script.say(["i hope theres no one on main street..."], self.game.player)
+        yield from self.script.wait(500)
+        yield from self.script.say(["what am i saying, main street is literally the busiest street in town"], self.game.player)
+        yield from self.script.wait(600)
+        yield from self.script.say(["but the only alternative is that unfamiliar long route..."], self.game.player)
+        yield from self.script.wait(600)
+        yield from self.script.say(["ill think about it tomorrow"], self.game.player)
+        yield from self.script.wait(500)
+        self.flags["show_bedroom_pulse"] = True
 
-   
 
     """ rendering """
     def render_backgrounds(self, time_of_day="night"):
@@ -868,7 +1059,8 @@ class FirstScene:
             self.render_day_backgrounds()
 
     def render_night_backgrounds(self) -> None:
-        bedroom = pygame.transform.scale(self.bedroom_night_img, (self.game.internal_w, self.game.internal_h))
+        bedroom_src = self.bedroom_night_lamp_off_img if self.flags.get("lamp_off", False) else self.bedroom_night_img
+        bedroom = pygame.transform.scale(bedroom_src, (self.game.internal_w, self.game.internal_h))
         kitchen_closed = pygame.transform.scale(self.kitchen_night_img, (self.game.internal_w, self.game.internal_h))
         kitchen_open = pygame.transform.scale(self.fridge_open_img, (self.game.internal_w, self.game.internal_h))
 
@@ -910,6 +1102,8 @@ class FirstScene:
     
     def render_glow_prompt(self) -> None:
         if self.transitioning: return
+        if self.flags.get("picture_zoom_active"): return
+        if self.flags.get("sticky_note_open"): return
         if self.flags.get("show_exit_pulse") and self.in_kitchen:
             self.render_glowing_text(["Exit house", "->"], side="right", color=(180, 255, 190))
             return
@@ -919,7 +1113,7 @@ class FirstScene:
                 self.render_glowing_text(["Bedroom", "<-"], side="left", color=(255, 245, 180))
             return
 
-        if self.flags.get("door_unlocked") or self.flags.get("show_exit_pulse") or self.flags.get("show_bedroom_pulse"):
+        if self.flags.get("door_unlocked") or self.flags.get("show_exit_pulse"):
             self.render_glowing_text(["Kitchen", "->"], side="right", color=(255, 245, 180))
 
     def render_glowing_text(self, lines: list[str], side: str, color=(255, 245, 180)) -> None:
@@ -952,7 +1146,7 @@ class FirstScene:
             self.game.display.blit(temp, pos)
 
     def render_sanity_dots(self) -> None:
-        total = self.forced_milk_failures + 1  # 6
+        total = self.max_milk_attempts
         remaining = max(0, total - self.milk_attempt_count)
 
         now = pygame.time.get_ticks()
@@ -1016,16 +1210,17 @@ class FirstScene:
             self.game.menu_font.render(self.game.display, line, (x, y + idx * 18))
         
     def can_return_to_bedroom(self) -> bool:
-        return bool(
-            self.flags.get("show_bedroom_pulse")
-            and self.flags.get("fridge_opened")
-            and self.flags.get("read_sticky_note")
-            and self.flags.get("holding_milk")
-        )
+        return bool(self.in_kitchen and self.flags.get("door_unlocked") and self.flags.get("show_bedroom_pulse"))
 
     def update_transition(self, dt) -> None:
         if not self.flags['door_unlocked']: return
         player_rect = self.game.player.rect()
+        
+        if self.flags.get("ready_to_go") and self.in_kitchen and not self.transitioning:
+            if player_rect.colliderect(self.exit_house_trigger.move(-self.scroll_x, 0)):
+                self.game.cutscene.start(self.exit_house_voices())
+                return
+        
         if not self.transitioning:
             if not self.in_kitchen and player_rect.colliderect(self.bedroom_to_kitchen_trigger):
                 self.transitioning = True
@@ -1070,6 +1265,16 @@ class FirstScene:
                 self.in_kitchen = False
 
         self.game.player_movement = [0, 0]
+    
+    def exit_house_voices(self):
+        yield from self.script.play_voice("you_cant_leave_the_house")
+        yield from self.script.wait(500)
+        yield from self.script.play_voice("its_not_safe")
+        yield from self.script.wait(500)
+        yield from self.script.play_voice("dont_go_out_there")
+        yield from self.script.wait(1000)
+        self.game.milk_result_type = self.milk_result_type
+        self.scene_ended = True
 
     
     """ fridge interaction """
@@ -1107,6 +1312,13 @@ class FirstScene:
             return
 
         now = pygame.time.get_ticks()
+        if not self.flags.get("is_attempt_over", True):
+            self.flags["getting_milk"] = False
+            self.get_milk_progress = 0
+            self.get_milk_started_sound = False
+            self._milk_hold_ready_at = 0
+            return
+
         if now < self.milk_attempt_cooldown_until:
             self.flags["getting_milk"] = False
             self.get_milk_progress = 0
@@ -1148,6 +1360,7 @@ class FirstScene:
     def resolve_get_milk_attempt(self) -> None:
         self.milk_attempt_count += 1
 
+        self.flags["is_attempt_over"] = False
         self.flags["getting_milk"] = False
         self.get_milk_started_sound = False
         self.get_milk_progress = 0
@@ -1167,12 +1380,13 @@ class FirstScene:
 
     def fail_getting_milk(self, fail_data: dict[str, object]) -> None:
         self.last_milk_fail_reason = str(fail_data.get("display_reason", fail_data.get("reason", "that was not right.")))
+        self.milk_result_type = str(fail_data.get("milk_result", "milk"))
         self.milk_attempt_cooldown_until = pygame.time.get_ticks() + 2700
 
-        self.game.sfx.play_key("pouring_milk")
+        self.flags["is_attempt_over"] = False
         fail_sound_key = str(fail_data.get("sound", "wash_one_cup"))
 
-        fail_bpms = [105, 125, 140, 152, 158]
+        fail_bpms = [105, 130]
         fail_index = min(self.milk_attempt_count - 1, len(fail_bpms) - 1)
         fail_bpm = fail_bpms[fail_index]
         self.game.set_heartbeat_bpm(fail_bpm, ramp_rate=10.0)
@@ -1192,11 +1406,19 @@ class FirstScene:
         self.flags["milk_ready"] = True
         self.flags["holding_milk"] = True
         self.flags["drank_milk"] = False
+        self.flags["is_attempt_over"] = True
         self.get_milk_progress = self.get_milk_hold_time
         self.game.sfx.milk_cap(screwed_on=False)
+        self.game.cutscene.start(self.finish_milk_success_sequence())
+    
+    def finish_milk_success_sequence(self):
+        self.game.sfx.play_key("wash_one_cup")
+        yield from self.script.wait(800)
         self.game.sfx.play_key("glass_on_counter")
+        yield from self.script.wait(2500)
         self.game.sfx.play_key("pouring_milk")
-        self.game.cutscene.start(self.get_milk())
+        yield from self.script.wait(500)
+        yield from self.get_milk()
 
     def play_sound_if_available(self, sound_key: str, volume: float | None = None) -> None:
         if sound_key in getattr(self.game.sfx, "sounds", {}):
@@ -1217,29 +1439,51 @@ class FirstScene:
         thoughts = list(fail_data.get("thoughts", [reason]))
         is_mom_fail = bool(fail_data.get("is_mom_fail", False))
 
-        yield from self.script.wait(1000)
+        self.game.sfx.play_key("pouring_milk")
+        yield from self.script.wait(3000)
 
         if fail_sound_key:
             self.play_sound_if_available(fail_sound_key)
+            yield from self.script.wait(1500)
         while self.game.sfx.is_voice_playing(): yield
+        
+        if attempt == 1:
+            yield from self.script.wait(500)
+            
+            if self.in_kitchen:
+                self.mom.pos = [self.scroll_x + 20, self.game.internal_h - 280]
+            else:
+                self.mom.pos = [self.game.player.pos[0] + 120, self.game.player.pos[1] - 80]
+            
+            self.mom.fade_in()
+            yield from self.script.wait(1500)
+            
+            conv_keys = self.mom_dialogue_tree.get_conversation_sequence(self.flags)
+            yield from self.script.mom_talk_sequence(self.mom, conv_keys, self.mom_dialogue_tree)
+            
+            yield from self.script.wait(800)
+            self.mom.fade_out()
+            yield from self.script.wait(1200)
 
         if is_mom_fail:
             yield from self.voice_or_thought("honey_thats_gone_bad_pour_it_away", "pour it away", volume=volume)
             yield from self.script.wait(800)
             for line in list(fail_data.get("realization_lines", [])):
                 yield from self.script.say(line, self.game.player, stall=1100, interval=22)
-            yield from self.script.cloudthink(
-                ["one more try", "it's just milk", "you can do this"],
-                self.game.player, stall=900
-            )
+            yield from self.script.cloudthink(["one more try", "it's just milk", "you can do this"], self.game.player, stall=900)
+            self.flags["is_attempt_over"] = True
+            self.milk_attempt_cooldown_until = 0
             return
 
-        yield from self.script.shakethink(reason, self.game.player, stall=900)
-        yield from self.script.racethink(thoughts, self.game.player, stall=700, gap=65)
+        yield from self.script.shakethink(reason, self.game.player, stall=1100)
+        yield from self.script.wait(300)
+        yield from self.script.racethink(thoughts, self.game.player, stall=850, gap=120)
+        yield from self.script.wait(350)
 
         for idx, voice_key in enumerate(voices[:3]):
             fallback = thoughts[min(idx, len(thoughts) - 1)] if thoughts else reason
             yield from self.voice_or_thought(str(voice_key), str(fallback), volume=volume)
+            yield from self.script.wait(250)
 
         realization_lines = fail_data.get("realization_lines")
         if realization_lines:
@@ -1253,9 +1497,14 @@ class FirstScene:
             )
         else:
             yield from self.script.cloudthink(["just get the milk", "please"], self.game.player, stall=850)
+        self.flags["is_attempt_over"] = True
+        self.milk_attempt_cooldown_until = 0
 
     def render_get_milk_prompt(self, dt):
         if self.flags["milk_taken"]: return
+        if not self.flags.get("is_attempt_over", True):
+            self.get_milk_prompt_alpha = 0
+            return
         target_alpha = 255 if self.is_near_open_fridge() else 0
         fade_speed = 650 * dt
         if self.get_milk_prompt_alpha < target_alpha:
@@ -1339,6 +1588,68 @@ class FirstScene:
             x = rect.centerx - self.scroll_x - self.milk_hold_offset[0] - self.milk_in_hand_img.get_width()
         self.game.display.blit(self.milk_in_hand_img, (x, y))
 
+    def queue_action_prompt(self, text: str) -> None:
+        self.action_prompt_text = text
+        self.action_prompt_until = pygame.time.get_ticks() + 3000
+
+    def render_sticky_note_click_hint(self, screen_quad) -> None:
+        if not screen_quad: return
+        text = "Click here ->"
+        font = self.sticky_hint_font
+        tw = font.text_width(text)
+        th = self.game.get_font_height(font)
+        x = max(4, min(p[0] for p in screen_quad) - tw - 8)
+        y = min(p[1] for p in screen_quad) + 5
+        surf = pygame.Surface((max(1, tw), max(1, th)), pygame.SRCALPHA)
+        font.render(surf, text, (0, 0))
+        self.game.display.blit(surf, (x, y))
+
+    def render_drink_prompt(self, dt) -> None:
+        show = self.flags.get("holding_milk") and not self.flags.get("drank_milk") and not self.flags.get("drinking_milk")
+        target = 255 if show else 0
+        step = 650 * dt
+        if self.drink_prompt_alpha < target:
+            self.drink_prompt_alpha = min(target, self.drink_prompt_alpha + step)
+        else:
+            self.drink_prompt_alpha = max(target, self.drink_prompt_alpha - step)
+        if self.drink_prompt_alpha <= 0: return
+        text = "[E] Drink"
+        font = self.interact_prompt_font
+        tw = font.text_width(text)
+        th = self.game.get_font_height(font)
+        rect = self.game.player.rect()
+        x = rect.right - self.scroll_x + 12
+        y = rect.centery - th // 2
+        if x + tw > self.game.internal_w - 4:
+            x = rect.left - self.scroll_x - tw - 12
+        surf = pygame.Surface((max(1, tw), max(1, th)), pygame.SRCALPHA)
+        font.render(surf, text, (0, 0))
+        surf.set_alpha(int(self.drink_prompt_alpha * 0.9))
+        self.game.display.blit(surf, (x, y))
+
+    def render_picture_frame_zoom(self) -> None:
+        if not self.flags.get("picture_zoom_active", False): return
+        if self.flags.get("sticky_note_open", False): return
+        zoom = 3.0
+        crop_w = int(self.game.internal_w / zoom)
+        crop_h = int(self.game.internal_h / zoom)
+        target_x = 675 - self.scroll_x
+        target_y = 274
+        crop_x = int(target_x - crop_w // 2)
+        crop_y = int(target_y - crop_h // 2)
+        crop_x = max(0, min(self.game.internal_w - crop_w, crop_x))
+        crop_y = max(0, min(self.game.internal_h - crop_h, crop_y))
+        crop = self.game.display.subsurface(pygame.Rect(crop_x, crop_y, crop_w, crop_h)).copy()
+        zoomed = pygame.transform.scale(crop, (self.game.internal_w, self.game.internal_h))
+        self.game.display.blit(zoomed, (0, 0))
+        
+        prompt_text = "Press [E] to zoom out"
+        prompt_surf = self.game.heart_ui_font.render(prompt_text, True, (255, 255, 255))
+        prompt_surf.set_alpha(200)
+        prompt_x = self.game.internal_w // 2 - prompt_surf.get_width() // 2
+        prompt_y = self.game.internal_h - 40
+        self.game.display.blit(prompt_surf, (prompt_x, prompt_y))
+
 
     """ sticky note interaction """
     def get_note_quad(self) -> tuple[list[tuple[int, int]], int | float]:
@@ -1366,6 +1677,7 @@ class FirstScene:
             pygame.draw.polygon(self.glow, (255, 245, 80, alpha), screen_quad)
             pygame.draw.polygon(self.glow, (255, 255, 100, int(100 + pulse * 155)), screen_quad, width=2)
             self.game.display.blit(self.glow, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
+            self.render_sticky_note_click_hint(screen_quad)
         elif hovered:
             pulse = (math.sin(pygame.time.get_ticks() * 0.006) + 1) / 2
             alpha = 45 + int(pulse * 30)
@@ -1491,6 +1803,7 @@ class FirstScene:
                 5
             )
         self.sticky_note_icon_rect = pygame.Rect(x, y, 38, 38)
+   
         
     """ bed interaction """
     def get_bed_quad(self) -> tuple[list[tuple[int, int]], list[tuple[int, int]]]:
@@ -1500,9 +1813,9 @@ class FirstScene:
     
     def is_near_bed(self):
         if self.in_kitchen: return False
-        if not self.flags["holding_milk"]: return False
         if not self.flags["read_sticky_note"]: return False
         if self.flags["bed_sleep_done"]: return False
+        if not (self.flags["holding_milk"] or self.flags["drank_milk"]): return False
 
         player_rect = self.game.player.rect()
         quad1, quad2 = self.get_bed_quad()
@@ -1552,7 +1865,7 @@ class FirstScene:
 
     """ audio helpers """
     def panicked_breathing_ramp(self):
-        self.game.sfx.play_key("male_panicked_breathing")
+        yield from self.script.play_voice("male_panicked_breathing")
         self.game.set_heartbeat_bpm(90)
         yield from self.script.wait(700)
         self.game.set_heartbeat_bpm(100, ramp_rate=4.0)
@@ -1614,16 +1927,5 @@ class FirstScene:
         self.game.display.blit(surf, (x, y))
 
     def update_ambient_ghosts(self, dt: float) -> None:
-        active = (
-            self.flags["door_unlocked"]
-            and not self.transitioning
-            and not self.flags["sticky_note_open"]
-            and not self.flags["sleeping"]
-        )
-        room_left = self.game.internal_w if self.in_kitchen else 0
-        room_right = room_left + self.game.internal_w
-        fridge_rect = self.fridge_rect if self.in_kitchen else None
-
-        room_name = "kitchen" if self.in_kitchen else "bedroom"
-        self.game.ghost_manager.update(dt, room_left=room_left, room_right=room_right, fridge_rect=fridge_rect, active=active, room_name=room_name)
-        self.game.ghost_manager.render(self.game.display, offset=(self.scroll_x, 0))
+        if hasattr(self.game, "ghost_manager"): self.game.ghost_manager.clear()
+        return

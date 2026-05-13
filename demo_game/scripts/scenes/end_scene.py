@@ -7,14 +7,6 @@ class EndScene:
         self.title_font = pygame.font.Font(asset("assets/fonts/Minecraftia-Regular.ttf"), 28)
         self.body_font = pygame.font.Font(asset("assets/fonts/Minecraftia-Regular.ttf"), 18)
 
-        self.lines = [
-            "Congratulations.",
-            "You finally went to sleep",
-            "after a big gulp of milk.",
-            "",
-            "For tonight, that is enough.",
-        ]
-
         gap = 24
         button_h = self.game.get_font_height(self.game.button_font) + 12 * 2
         bottom_y = self.game.internal_h - 62
@@ -27,6 +19,52 @@ class EndScene:
             center_y=center_y,
             gap=gap,
         )
+    
+    def get_lines_for_milk_result(self):
+        milk_result = getattr(self.game, "milk_result_type", "milk")
+        
+        if milk_result == "milk":
+            return [
+                "Congratulations.",
+                "You finally went to sleep",
+                "after a big gulp of milk.",
+                "",
+                "For tonight, that is enough.",
+            ]
+        elif milk_result == "water":
+            return [
+                "Well, at least you're hydrated.",
+                "Water isn't milk, but hey,",
+                "maybe next time you'll get it right.",
+                "",
+                "For tonight, that is enough.",
+            ]
+        elif milk_result == "juice":
+            return [
+                "Juice? Really?",
+                "At least it's hydrating.",
+                "Maybe try better next time.",
+                "",
+                "For tonight, that is enough.",
+            ]
+        elif milk_result == "expired":
+            return [
+                "You're just unlucky.",
+                "",
+                "...",
+            ]
+        elif milk_result == "dropped":
+            return [
+                "You dropped it.",
+                "At least you tried.",
+                "That counts for something, right?",
+                "",
+                "For tonight, that is enough.",
+            ]
+        else:
+            return [
+                "For tonight, that is enough.",
+            ]
 
     def get_mouse_pos(self) -> tuple[int, int]:
         mx, my = pygame.mouse.get_pos()
@@ -38,6 +76,8 @@ class EndScene:
 
         fade_alpha = 255
         fade_speed = 160
+        
+        lines = self.get_lines_for_milk_result()
 
         while True:
             dt = self.game.clock.get_time() / 1000
@@ -52,7 +92,7 @@ class EndScene:
             )
 
             y = 175
-            for line in self.lines:
+            for line in lines:
                 if line == "":
                     y += 18
                     continue
