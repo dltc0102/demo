@@ -1,10 +1,10 @@
 name: Build Windows Executable
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
-  workflow_dispatch:
 
 jobs:
   build-windows:
@@ -21,7 +21,7 @@ jobs:
       - name: Set Up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3.12'
 
       - name: Install Dependencies
         run: |
@@ -32,8 +32,13 @@ jobs:
         run: |
           pyinstaller game.spec
 
-      - name: Upload Windows Build
-        uses: actions/upload-artifact@v4
+      - name: Zip Build
+        run: |
+          powershell Compress-Archive -Path dist\* -DestinationPath windows-build.zip
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: windows-build
-          path: demo_game/dist/
+          tag_name: latest
+          name: Latest Build
+          files: demo_game/windows-build.zip
