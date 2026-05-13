@@ -6,7 +6,6 @@ __pycache__/
 .eggs/
 build/
 dist/
-*.spec
 .DS_Store
 .vscode/
 .idea/
