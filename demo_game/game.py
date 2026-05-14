@@ -936,7 +936,7 @@ class Game:
             try: return pygame.font.Font(path, size)
             except Exception: pass
 
-        return pygame.font.SysFont("arial", size)
+        return ValueError("Could not load any unicode font")
 
     def render_unicode_text(self, font: pygame.font.Font, text: str, pos: tuple[int, int], color: tuple[int, int, int] = (235, 235, 235)) -> int:
         surf = font.render(text, True, color)

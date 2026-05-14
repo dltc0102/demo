@@ -1,10 +1,12 @@
 import pygame
+from scripts.ui.font import Font
+from paths import asset
 
 class IntroScene:
     def __init__(self, game):
         self.game = game
-        self.font = pygame.font.SysFont("arial", 22)
-        self.small_font = pygame.font.SysFont("arial", 16)
+        self.font = Font(asset("assets/fonts/large_font_white.png"), scale=1)
+        self.small_font = Font(asset("assets/fonts/large_font_white.png"), scale=1)
         self.initial_black_time = 1500
         self.fade_in_time = 2200
         self.hold_time = 4000
