@@ -35,13 +35,12 @@ jobs:
         run: |
           pyinstaller game.spec
 
-      - name: Zip Build
-        run: |
-          powershell Compress-Archive -Path dist\* -DestinationPath windows-build.zip
-
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
           name: Latest Build
-          files: demo_game/windows-build.zip
+          files: demo_game/dist/game.exe
+          draft: false
+          prerelease: false
+          make_latest: true
