@@ -1,10 +1,17 @@
 name: Build Windows Executable
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag'
+        required: true
+        default: 'v0.1.0'
+
+      release_name:
+        description: 'Release name'
+        required: true
+        default: 'Demo Build'
 
 permissions:
   contents: write
@@ -38,9 +45,6 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
-          name: Latest Build
+          tag_name: ${{ github.event.inputs.release_tag }}
+          name: ${{ github.event.inputs.release_name }}
           files: demo_game/dist/game.exe
-          draft: false
-          prerelease: false
-          make_latest: true
