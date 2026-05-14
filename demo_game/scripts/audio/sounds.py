@@ -305,16 +305,21 @@ class SoundEffects:
         return pygame.sndarray.make_sound(amplified)
 
     def make_blip_sound(self, frequency: int = 220, duration_ms: int = 80, volume: float = 0.4) -> pygame.mixer.Sound:
-        sample_rate = 44100
+        mixer_init = pygame.mixer.get_init()
+        sample_rate = mixer_init[0] if mixer_init else 44100
+        mixer_channels = mixer_init[2] if mixer_init else 2
         num_samples = int(sample_rate * duration_ms / 1000)
         t = np.linspace(0, duration_ms / 1000, num_samples, endpoint=False)
         wave = np.sin(2 * np.pi * frequency * t)
-        fade_samples = int(num_samples * 0.3)
+        fade_samples = max(1, int(num_samples * 0.3))
         envelope = np.ones(num_samples)
         envelope[-fade_samples:] = np.linspace(1, 0, fade_samples)
-        wave = (wave * envelope * 32767 * volume).astype(np.int16)
-        stereo = np.stack([wave, wave], axis=1)
-        return pygame.sndarray.make_sound(stereo)
+        audio = (wave * envelope * 32767 * volume).astype(np.int16)
+        if mixer_channels == 2:
+            audio = np.column_stack((audio, audio))
+        elif mixer_channels != 1:
+            audio = np.repeat(audio[:, None], mixer_channels, axis=1)
+        return pygame.sndarray.make_sound(audio)
 
     def play_speech_blip(self, volume: float = 0.45) -> None:
         if self.speech_channel.get_busy():

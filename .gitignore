@@ -16,3 +16,4 @@ level_editor.py*.zip
 build/
 dist/
 __pycache__/
+*.zip
