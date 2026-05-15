@@ -1248,7 +1248,7 @@ class Game:
             resting = self.heart_rate.resting_bpm
             maximum = self.heart_rate.max_bpm
             ratio = max(0.0, min(1.0, (bpm - resting) / (maximum - resting)))
-            base = 0.45 + ratio * 0.55
+            base = 0.4 + ratio * 0.4
 
             return base * self.heartbeat_master * self.master_volume
 
