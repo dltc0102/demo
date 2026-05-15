@@ -79,11 +79,14 @@ class IntroScene:
 
         for idx, line in enumerate(self.text_lines):
             font = self.font if idx == 0 else self.small_font
-
-            text_surf = font.render(line, True, (240, 240, 240))
+            text_width = font.text_width(line) if line else 10
+            text_height = max(char.get_height() for char in font.characters.values()) if font.characters else 10
+            text_surf = pygame.Surface((max(1, text_width), text_height), pygame.SRCALPHA)
+            text_surf.fill((0, 0, 0, 0))
+            if line:
+                font.render(text_surf, line, (0, 0))
             text_surf.set_alpha(alpha)
 
             x = self.game.internal_w // 2 - text_surf.get_width() // 2
             self.game.display.blit(text_surf, (x, y))
-
             y += 34 if idx == 0 else 26
