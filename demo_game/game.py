@@ -1147,7 +1147,6 @@ class Game:
         elif category == "voices":
             self.base_voice_volumes[name] = volume
         self.apply_master_volumes()
-        self.save_audio_settings()
 
 
     """ helper functions """
